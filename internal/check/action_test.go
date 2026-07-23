@@ -21,7 +21,7 @@ func writeActionScript(t *testing.T, path, prefix string) {
 		t.Fatal(err)
 	}
 
-	err = os.WriteFile(path, []byte("prefix := \""+prefix+"\"\n"+actionScript), 0o644)
+	err = os.WriteFile(path, []byte("prefix := \""+prefix+"\"\n"+actionScript), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
