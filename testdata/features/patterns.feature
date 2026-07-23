@@ -58,11 +58,14 @@ Feature: IgnorePatterns
         And the exit status should be 1
 
     Scenario: HTML with Ignored Classes
+        # `<a ...>hasChildren</a>()` is a function call, and Vale doesn't flag
+        # `hasChildren()` when it appears literally. It used to be flagged here
+        # only because a space was inserted after the closing tag, splitting the
+        # call into a bare word. See #1111.
         When I test patterns for "test3.html"
         Then the output should contain exactly:
             """
             test3.html:30:75:write-good.We:Try to avoid using first-person plural like 'us'.
-            test3.html:32:98:Vale.Spelling:Did you really mean 'hasChildren'?
             test3.html:33:64:write-good.We:Try to avoid using first-person plural like 'us'.
             """
         And the exit status should be 1

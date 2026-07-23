@@ -1,0 +1,7 @@
+= T
+
+==== Mixing `ResourceProvider`++s++
+
+==== One Tree of `Resource`++s++
+
+==== Using `Foo`++s++ Here

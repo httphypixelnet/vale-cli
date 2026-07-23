@@ -54,6 +54,18 @@ Feature: Scopes
         When I test scope "skip-inline"
         Then the output should not contain anything
 
+    Scenario: Inline spacing (#1111, #1119)
+        # Whitespace around inline markup must come from the source, not from a
+        # guess. `<code>X</code>s` must not gain a space (which corrupted the
+        # extracted heading text) and `<strong>x</strong> :` must not lose one
+        # (which produced false positives for spacing rules). The one expected
+        # alert is a real violation: `**bold**:` has no space in the source.
+        When I test scope "inline-space"
+        Then the output should contain exactly:
+            """
+            test.md:7:1:rules.InlineSpace:Use a non-breaking space before 'd\x{00A0}:'.
+            """
+
     Scenario: Attr
         When I test scope "attr"
         Then the output should contain exactly:

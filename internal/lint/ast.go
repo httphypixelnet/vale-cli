@@ -34,6 +34,10 @@ var tagToScope = map[string]string{
 func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //nolint:unparam
 	var class, parentClass, attr string
 	var inBlock, inline, skip, skipClass bool
+	// closedInline records that the previous token closed an inline element.
+	// Only then does the next text node's leading whitespace faithfully
+	// reflect the source, since `walk` trims it away before we see it.
+	var closedInline bool
 
 	buf := bytes.NewBufferString("")
 
@@ -84,9 +88,11 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 			}
 			inline = core.StringInSlice(txt, inlineTags)
 			skip = core.StringInSlice(txt, skipped)
+			closedInline = false
 			walker.addTag(txt)
 		} else if tokt == html.EndTagToken && core.StringInSlice(txt, inlineTags) {
 			walker.activeTag = ""
+			closedInline = true
 		} else if tokt == html.CommentToken {
 			f.UpdateComments(txt)
 			walker.update(txt, tokt)
@@ -117,7 +123,14 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 				if walker.isNestedList() && !inline {
 					txt = " " + txt
 				}
-				txt, skip = clean(txt, attr, skip || skipClass, inline)
+				// Once an inline element closes, the next token's leading
+				// whitespace is exactly what the source had, so trust it
+				// rather than inferring one: `<code>X</code>s` must not gain a
+				// space (#1111) and `<strong>x</strong> :` must not lose one
+				// (#1119).
+				spaced := startsWithSpace(tok.Data)
+				txt, skip = clean(txt, attr, skip || skipClass, inline, spaced, closedInline)
+				closedInline = false
 				// `clean` prefixes inline content with a space so it doesn't
 				// fuse with the preceding text. When that content directly
 				// follows a tight boundary -- an opening bracket (a link in
@@ -257,7 +270,21 @@ func endsWithTightBoundary(buf *bytes.Buffer) bool {
 	}
 }
 
-func clean(txt, attr string, skip, inline bool) (string, bool) {
+// startsWithSpace reports whether s begins with whitespace. It's applied to
+// raw token data -- before `walk` trims it -- to recover whether the source
+// actually separated a text node from the markup preceding it.
+func startsWithSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	switch s[0] {
+	case ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
+
+func clean(txt, attr string, skip, inline, spaced, closedInline bool) (string, bool) {
 	// Closing brackets are included so that inline content immediately
 	// followed by one (e.g., a link inside parentheses) doesn't get a spurious
 	// space inserted before it -- "(HNSW)" rather than "(HNSW )" (#1056). Dashes
@@ -272,7 +299,12 @@ func clean(txt, attr string, skip, inline bool) (string, bool) {
 		skip = false
 	}
 
-	if inline && !starter {
+	// Text that follows a closed inline element is separated exactly as the
+	// source separated it. Elsewhere -- text *inside* an inline element -- the
+	// opening tag is the boundary and carries no whitespace of its own, so we
+	// fall back to padding inline content; otherwise `in <code/> for`
+	// collapses to `infor` (#1052).
+	if (closedInline && spaced) || (!closedInline && inline && !starter) {
 		txt = " " + txt
 	}
 

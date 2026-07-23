@@ -1,0 +1,8 @@
+extends: capitalization
+message: "'%s' should use title-style capitalization."
+level: error
+scope: heading
+match: $title
+# A strict threshold so that any stray token introduced by markup extraction
+# (rather than by the prose itself) fails the check.
+threshold: 1.0

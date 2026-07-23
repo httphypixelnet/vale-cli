@@ -1,0 +1,6 @@
+extends: substitution
+message: "Use a non-breaking space before '%s'."
+level: error
+nonword: true
+swap:
+  '([^ \x{00A0}])([:!?;»%])': '$1\x{00A0}$2'
