@@ -22,6 +22,9 @@
 </table>
 </div>
 
+> [!TIP]
+> **Try [Vale CMS](https://cms.vale.sh)**: the hosted authoring layer for Vale. Build and maintain your style guide in the browser -- config, rules, vocabularies, dictionaries, filters, views, and templates -- with the real Vale engine linting live before you ship changes back to your repo.
+
 ## :heart: Sponsors
 
 > Hi there! I'm [@jdkato](https://github.com/jdkato), the sole developer of Vale. If you'd like to help me dedicate more time to _developing_, _documenting_, and _supporting_ Vale, feel free to donate through [GitHub Sponsors](https://github.com/sponsors/jdkato) or [Open Collective](https://opencollective.com/vale). Any donation&mdash;big, small, one-time, or recurring&mdash;is greatly appreciated!
