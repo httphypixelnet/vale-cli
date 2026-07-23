@@ -61,7 +61,7 @@ func (w *walker) update(txt string, tokt html.TokenType) {
 	if (tokt == html.TextToken || tokt == html.CommentToken) && txt != "" {
 		for _, s := range strings.Split(txt, "\n") {
 			found = w.sub(s, '@')
-			if !found {
+			if !found && w.ext != ".adoc" {
 				for _, f := range strings.Fields(s) {
 					_ = w.sub(f, '@')
 				}

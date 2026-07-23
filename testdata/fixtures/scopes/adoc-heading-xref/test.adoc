@@ -1,0 +1,15 @@
+= Document
+
+[[intro]]
+== first heading lowercase
+
+This paragraph links to xref:#intro[].
+
+[[middle]]
+== second heading lowercase
+This paragraph links to xref:#intro[].
+
+[[final]]
+== third heading lowercase
+
+This paragraph links to xref:#intro[].

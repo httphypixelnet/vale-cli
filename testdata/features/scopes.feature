@@ -128,6 +128,15 @@ Feature: Scopes
             test.adoc:5:4:Test.Headings:'about the document' should use title-style capitalization.
             """
 
+    Scenario: AsciiDoc headings with anchors and xrefs (#1109)
+        When I test scope "adoc-heading-xref"
+        Then the output should contain exactly:
+            """
+            test.adoc:4:4:Test.Headings:'first heading lowercase' should use title-style capitalization.
+            test.adoc:9:4:Test.Headings:'second heading lowercase' should use title-style capitalization.
+            test.adoc:13:4:Test.Headings:'third heading lowercase' should use title-style capitalization.
+            """
+
     Scenario: Table
         When I test scope "table"
         Then the output should contain exactly:
