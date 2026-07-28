@@ -18,6 +18,15 @@ type NLPToken struct {
 	Tag     string
 	Skip    int
 
+	// UPOS matches a universal part-of-speech tag -- NOUN, VERB, ADJ and so
+	// on -- rather than a Penn Treebank one.
+	//
+	// It compiles down to the equivalent Penn tags, plus a word constraint for
+	// the few categories Penn cannot express (see upos.go). Rules written
+	// against universal tags are portable; rules written against Penn tags are
+	// more precise.
+	UPOS string
+
 	// Target narrows the alert to this token alone.
 	//
 	// Without it a match spans every token in the sequence. Marking one lets a
@@ -26,7 +35,15 @@ type NLPToken struct {
 	// words".
 	Target bool
 
-	re       *rx.Regexp
+	re *rx.Regexp
+
+	// wordRe narrows a universal tag to the words it can apply to.
+	//
+	// Kept apart from `re` because that one doubles as the anchor and is run
+	// against the whole sentence; this is only ever tested against a single
+	// token's text.
+	wordRe *rx.Regexp
+
 	Negate   bool
 	optional bool
 	start    bool
@@ -61,6 +78,33 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 	}
 
 	for i, token := range rule.Tokens {
+		if token.UPOS != "" {
+			if token.Tag != "" {
+				return rule, core.NewE201FromPosition(
+					"a token cannot set both `tag` and `upos`", path, 1)
+			}
+
+			pattern, uerr := uposTagPattern(token.UPOS)
+			if uerr != nil {
+				return rule, core.NewE201FromPosition(uerr.Error(), path, 1)
+			}
+			rule.Tokens[i].Tag = pattern
+			token.Tag = pattern
+
+			// A category Penn cannot express on its own also constrains the
+			// word. Only applied when the rule did not ask for a pattern of
+			// its own, which is the more specific request.
+			if token.Pattern == "" {
+				if words := uposWordPattern(token.UPOS); words != "" {
+					wre, werr := rx.Compile(words)
+					if werr != nil {
+						return rule, core.NewE201FromPosition(werr.Error(), path, 1)
+					}
+					rule.Tokens[i].wordRe = wre
+				}
+			}
+		}
+
 		if !rule.needsTagging && token.Tag != "" {
 			rule.needsTagging = true
 		}
@@ -112,7 +156,7 @@ func makeTokens(s *Sequence, generic baseCheck) error {
 			s.Tokens = append(s.Tokens, tok)
 		}
 
-		if tok.Pattern != "" || tok.Tag != "" {
+		if tok.Pattern != "" || tok.Tag != "" || tok.UPOS != "" {
 			tok.optional = false
 			tok.end = true
 			s.Tokens = append(s.Tokens, tok)
@@ -132,6 +176,12 @@ func tokensMatch(token NLPToken, word tag.Token) bool {
 
 	failedTag = failedTag == token.Negate
 	failedTok := token.re != nil && token.re.MatchStringStd(word.Text) == token.Negate
+
+	// A universal tag that Penn cannot express also restricts which words
+	// qualify -- `upos: AUX` is "a verb, and one of these words".
+	if token.wordRe != nil && token.wordRe.MatchStringStd(word.Text) == token.Negate {
+		return false
+	}
 
 	if (token.Pattern == "" && failedTag) ||
 		(token.Tag == "" && failedTok) ||
@@ -356,10 +406,14 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 	positioned := f.NLP.Endpoint == ""
 
 	txt := blk.Text
-	for idx, tok := range s.Tokens {
-		if !tok.Negate && tok.Pattern != "" {
-			// We're looking for our "anchor" ...
-			for _, loc := range tok.re.FindAllStringIndex(txt, -1) {
+	idx, tok, ok := s.anchor()
+	if ok {
+		{
+			// Each candidate position for the anchor is one possible
+			// violation. A `pattern` anchor enumerates them by searching the
+			// text; a tag-only anchor has nothing to search for, so we let
+			// sequenceMatches walk the words and stop when it runs out.
+			for _, loc := range s.candidates(txt, tok, len(words)) {
 				// These are all possible violations in `txt`:
 				m := sequenceMatches(idx, s, tok, words, history)
 				history = append(history, m.index)
@@ -392,7 +446,7 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 
 					alerts = append(alerts, a)
 					offset = []string{}
-				} else {
+				} else if loc != nil {
 					converted, err := re2Loc(txt, loc)
 					if err != nil {
 						return alerts, err
@@ -400,9 +454,40 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 					offset = append(offset, converted)
 				}
 			}
-			break
 		}
 	}
 
 	return alerts, nil
+}
+
+// anchor picks the token the search starts from.
+//
+// A `pattern` token is preferred because it can be located in the text
+// directly. Failing that any tagged token will do -- without this, a rule made
+// only of tags matched nothing at all, silently.
+func (s Sequence) anchor() (int, NLPToken, bool) {
+	for i, tok := range s.Tokens {
+		if !tok.Negate && tok.Pattern != "" {
+			return i, tok, true
+		}
+	}
+	for i, tok := range s.Tokens {
+		if !tok.Negate && tok.Tag != "" {
+			return i, tok, true
+		}
+	}
+	return 0, NLPToken{}, false
+}
+
+// candidates returns one entry per position the anchor might occupy.
+//
+// For a `pattern` anchor each entry is the match's location in the text, which
+// the caller reports as an offset when the surrounding sequence does not pan
+// out. A tag-only anchor has no such location, so the entries are nil and the
+// count simply bounds how many times to try.
+func (s Sequence) candidates(txt string, tok NLPToken, words int) [][]int {
+	if tok.re != nil {
+		return tok.re.FindAllStringIndex(txt, -1)
+	}
+	return make([][]int, words)
 }
