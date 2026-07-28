@@ -23,6 +23,13 @@ type walker struct {
 	idx int
 	z   *html.Tokenizer
 
+	// cursor is how far into the context we have already emitted blocks.
+	//
+	// Blocks come out in document order, so searching forward from here finds
+	// the right occurrence of a repeated phrase and keeps the total work
+	// linear in the document rather than linear per block.
+	cursor int
+
 	// queue holds each segment of text we encounter in a block, which we then
 	// use to sequentially update our context.
 	queue []string
@@ -133,7 +140,40 @@ func (w *walker) block(text, scope string) nlp.Block {
 		line = pos
 	}
 
-	return nlp.NewLinedBlock(w.getCtx(), text, scope, line)
+	b := nlp.NewLinedBlock(w.getCtx(), text, scope, line)
+	b.Offset = w.locate(text)
+
+	return b
+}
+
+// locate returns where text begins in the context, advancing the cursor past
+// it, or -1 if it cannot be found from the cursor onwards.
+//
+// Recording the position here is what lets checks report byte offsets. Without
+// it every alert has to be placed by searching the document and masking what
+// it matched, which costs a copy of the document per alert.
+func (w *walker) locate(text string) int {
+	if text == "" {
+		return -1
+	}
+
+	ctx := w.getCtx()
+	if w.cursor > len(ctx) {
+		return -1
+	}
+
+	i := strings.Index(ctx[w.cursor:], text)
+	if i < 0 {
+		// Extraction can rewrite text -- stripping markup, decoding entities --
+		// leaving something that is not a substring of the source. Those blocks
+		// keep the old search-based placement.
+		return -1
+	}
+
+	off := w.cursor + i
+	w.cursor = off + len(text)
+
+	return off
 }
 
 func (w *walker) walk() (html.TokenType, html.Token, string) {

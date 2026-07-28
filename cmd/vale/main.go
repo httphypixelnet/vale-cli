@@ -83,6 +83,10 @@ func handleError(err error) {
 }
 
 func main() {
+	// Every exit path below calls this explicitly: os.Exit skips deferred
+	// functions, so a defer here would silently drop the profile.
+	stopProfiling := startProfiling()
+
 	pflag.Parse()
 
 	args := pflag.Args()
@@ -90,6 +94,7 @@ func main() {
 
 	if Flags.Version { //nolint:gocritic
 		fmt.Println("vale version " + version)
+		stopProfiling()
 		os.Exit(0)
 	} else if Flags.Help {
 		pflag.Usage()
@@ -103,6 +108,7 @@ func main() {
 			if err := cmd(args[1:], &Flags); err != nil {
 				handleError(err)
 			}
+			stopProfiling()
 			os.Exit(0)
 		}
 	}
@@ -125,9 +131,11 @@ func main() {
 	hasErrors, err := PrintAlerts(linted, config)
 	if err != nil {
 		handleError(err)
-	} else if hasErrors && !Flags.NoExit {
-		os.Exit(1)
 	}
 
+	stopProfiling()
+	if hasErrors && !Flags.NoExit {
+		os.Exit(1)
+	}
 	os.Exit(0)
 }

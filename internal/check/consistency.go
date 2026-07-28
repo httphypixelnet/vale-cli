@@ -100,6 +100,13 @@ func (o Consistency) Run(blk nlp.Block, f *core.File, cfg *core.Config) ([]core.
 		if matches != nil && core.AllStringsInSlice(s.subs, f.Sequences) {
 			o.Name = o.Extends
 
+			// Not anchored, deliberately. `loc` is whatever the submatch loop
+			// above left behind, which is the *last* match in the block rather
+			// than the one being reported; searching for the matched text
+			// instead lands on the first occurrence, which is what this check
+			// has always reported. Anchoring would promote that leftover into
+			// the output. The rule fires at most once per block, so there is
+			// nothing to gain by it either.
 			a, err := makeAlert(o.Definition, loc, txt, cfg)
 			if err != nil {
 				return alerts, err

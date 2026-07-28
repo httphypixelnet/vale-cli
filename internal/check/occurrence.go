@@ -102,6 +102,9 @@ func (o Occurrence) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core.A
 			if err != nil {
 				return alerts, err
 			}
+			// Only this branch: the zero-occurrence case above reports a line
+			// number, not a span into the text.
+			anchor(&a, blk)
 		}
 
 		// Pass the count as an int (not a string) so messages can use either

@@ -135,6 +135,7 @@ func (c Capitalization) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]co
 			c.Description, blk.Text, expected)
 		a.Action = action
 
+		anchor(&a, blk)
 		alerts = append(alerts, a)
 	}
 

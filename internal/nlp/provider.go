@@ -6,6 +6,10 @@ import (
 
 type segmenter func(string) []string
 
+// maxOffsetScan bounds the work resolveOffset will do to place a block whose
+// offset was not recorded.
+const maxOffsetScan = 8 << 10
+
 // A Block represents a section of text.
 type Block struct {
 	Context string // parent content - e.g., sentence -> paragraph
@@ -69,10 +73,28 @@ func (b *Block) resolveOffset() int {
 	if b.Text == b.Context {
 		return 0
 	}
-	if strings.Count(b.Context, b.Text) == 1 {
-		return strings.Index(b.Context, b.Text)
+
+	// Recovering the offset means scanning the context, once per block. On a
+	// large document that is quadratic, so give up past a threshold and let
+	// the caller fall back to locating alerts by search. Blocks carved out of
+	// markup have contexts of a paragraph or so; a context this large means
+	// the offset was not threaded through, which is the real fix.
+	if len(b.Context) > maxOffsetScan {
+		return -1
 	}
-	return -1
+
+	// Find the first occurrence, then look for a second starting just past it.
+	// strings.Count would scan the whole context to completion; this stops at
+	// the second hit, and skips the search entirely once it is clear there is
+	// no first one.
+	first := strings.Index(b.Context, b.Text)
+	if first < 0 {
+		return -1
+	}
+	if strings.Contains(b.Context[first+len(b.Text):], b.Text) {
+		return -1
+	}
+	return first
 }
 
 // Info handles NLP-related tasks.
@@ -161,8 +183,10 @@ func (n *Info) doNLP(blk *Block, seg segmenter) ([]Block, error) {
 		}
 	}
 
+	// The block itself, which is what most rules run against. It needs the
+	// offset as much as its children do.
 	blks = append(
-		blks, NewLinedBlock(ctx, blk.Text, blk.Scope, idx))
+		blks, NewLinedBlock(ctx, blk.Text, blk.Scope, idx).at(base))
 
 	return blks, nil
 }

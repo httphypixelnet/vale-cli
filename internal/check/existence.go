@@ -97,6 +97,7 @@ func (e Existence) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core.Al
 			if erra != nil {
 				return alerts, erra
 			}
+			anchor(&a, blk)
 			alerts = append(alerts, a)
 		}
 	}

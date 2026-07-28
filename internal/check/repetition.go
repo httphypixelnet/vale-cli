@@ -113,6 +113,8 @@ func (o Repetition) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core.A
 
 					a.Message, a.Description = formatMessages(o.Message,
 						o.Description, curr)
+
+					anchor(&a, blk)
 					alerts = append(alerts, a)
 					count = 0
 				}

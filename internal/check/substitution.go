@@ -172,6 +172,7 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 						s.Description, expected, observed)
 					a.Action = action
 
+					anchor(&a, blk)
 					alerts = append(alerts, a)
 				}
 			}

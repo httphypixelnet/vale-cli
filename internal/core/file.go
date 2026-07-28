@@ -347,7 +347,14 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 	}
 
 	if a.Span[0] > 0 {
-		f.ChkToCtx[a.Check], _ = Substitute(ctx, a.Match, '#')
+		// Masking the text we just reported keeps the *next* alert from this
+		// check finding the same occurrence again. An alert located by byte
+		// offset was never found by searching, so there is nothing to mask --
+		// and skipping it avoids copying the whole context per alert, which
+		// dominated Vale's allocations.
+		if !a.HasByteOffsets {
+			f.ChkToCtx[a.Check], _ = Substitute(ctx, a.Match, '#')
+		}
 		if !a.Hide {
 			// Ensure that we're not double-reporting an Alert:
 			entry := strings.Join([]string{
