@@ -1,6 +1,9 @@
 package check
 
-import "testing"
+import (
+	"testing"
+	"unicode/utf8"
+)
 
 // runeSpanToBytes underpins every anchored alert; an off-by-one here
 // mislocates findings rather than failing loudly.
@@ -62,6 +65,53 @@ func TestRuneSpanToBytesMatchesRuneSlicing(t *testing.T) {
 				want := string(runes[from:to])
 				if got := s[lo:hi]; got != want {
 					t.Errorf("%q [%d:%d] = %q, want %q", s, from, to, got, want)
+				}
+			}
+		}
+	}
+}
+
+// re2LocReference is the straightforward implementation of re2Loc: convert the
+// whole string and slice it. re2Loc avoids that allocation, so it has to agree
+// with this on every span, including the out-of-bounds ones.
+func re2LocReference(s string, loc []int) (string, bool) {
+	converted := []rune(s)
+
+	size := len(converted)
+	if loc[0] < 0 || loc[1] > size || loc[0] > loc[1] {
+		return "", false
+	}
+
+	return string(converted[loc[0]:loc[1]]), true
+}
+
+func TestRe2LocMatchesReference(t *testing.T) {
+	inputs := []string{
+		"",
+		"hello",
+		"héllo wörld",
+		"日本語のテキスト",
+		"emoji 👍🏽 here",
+		"mixed ascii ünd 日本 and 🎉 too",
+	}
+
+	for _, s := range inputs {
+		n := utf8.RuneCountInString(s)
+		// Deliberately overshoot the rune count so the out-of-bounds paths are
+		// covered as well as the valid ones.
+		for from := -2; from <= n+2; from++ {
+			for to := -2; to <= n+2; to++ {
+				loc := []int{from, to}
+
+				want, wantOK := re2LocReference(s, loc)
+				got, err := re2Loc(s, loc)
+
+				if wantOK != (err == nil) {
+					t.Fatalf("re2Loc(%q, %v): ok = %v, want %v (err: %v)",
+						s, loc, err == nil, wantOK, err)
+				}
+				if wantOK && got != want {
+					t.Fatalf("re2Loc(%q, %v) = %q, want %q", s, loc, got, want)
 				}
 			}
 		}

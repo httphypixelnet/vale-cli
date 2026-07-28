@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/mitchellh/mapstructure"
@@ -171,16 +172,20 @@ func formatMessages(msg string, desc string, subs ...string) (string, string) {
 
 // NOTE: We need to do this because regexp2, the library we use for extended
 // syntax, returns its locatons in *rune* offsets.
+//
+// The span is walked out to byte offsets rather than converting the string to
+// []rune: the conversion costs an allocation the size of the whole block on
+// every match, and this is called for each match and again for each alert.
+// Slicing the original instead shares its bytes, so the result is free.
 func re2Loc(s string, loc []int) (string, error) {
-	converted := []rune(s)
-
-	size := len(converted)
-	if loc[0] < 0 || loc[1] > size {
-		msg := fmt.Errorf("%d (%d:%d)", size, loc[0], loc[1])
+	lo, hi, ok := runeSpanToBytes(s, loc[0], loc[1])
+	if !ok {
+		msg := fmt.Errorf("%d (%d:%d)",
+			utf8.RuneCountInString(s), loc[0], loc[1])
 		return "", core.NewE100("re2loc: bounds", msg)
 	}
 
-	return string(converted[loc[0]:loc[1]]), nil
+	return s[lo:hi], nil
 }
 
 func makeAlert(chk Definition, loc []int, txt string, cfg *core.Config) (core.Alert, error) {
