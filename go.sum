@@ -63,8 +63,8 @@ github.com/huandu/xstrings v1.5.0 h1:2ag3IFq9ZDANvthTwTiqSSZLjDc+BedvHPAp5tJy2TI
 github.com/huandu/xstrings v1.5.0/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
 github.com/jdkato/go-tree-sitter-julia v0.1.0 h1:z+6zTbd6PHMKAge7GJx9QIwPQX2NOKb4Pj5jteJvaYY=
 github.com/jdkato/go-tree-sitter-julia v0.1.0/go.mod h1:lXNEZorcvU63DcANEklLMbDRjwam4VQ44MIV1Cck0w8=
-github.com/jdkato/prose/v3 v3.0.0 h1:MomxPb0GtTWXboechFvI429uBZoalYMgQ1hpTfI6Tbg=
-github.com/jdkato/prose/v3 v3.0.0/go.mod h1:VRQyR/EyA6bX457JTCIF67n04ycHek4v6v0veGiJvUk=
+github.com/jdkato/prose/v3 v3.0.1 h1:tIRDKg5i8HLBtrj3SdVHD948cDlz7b4mDupZI8206Uw=
+github.com/jdkato/prose/v3 v3.0.1/go.mod h1:VRQyR/EyA6bX457JTCIF67n04ycHek4v6v0veGiJvUk=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
 github.com/klauspost/cpuid/v2 v2.0.10/go.mod h1:g2LTdtYhdyuGPqyWyv7qRAmj1WBqxuObKfj5c0PQa7c=
 github.com/klauspost/cpuid/v2 v2.0.12 h1:p9dKCg8i4gmOxtv35DvrYoWqYzQrvEVdjQ762Y0OqZE=

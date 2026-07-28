@@ -14,9 +14,18 @@ import (
 
 // NLPToken represents a token of text with NLP-related attributes.
 type NLPToken struct {
-	Pattern  string
-	Tag      string
-	Skip     int
+	Pattern string
+	Tag     string
+	Skip    int
+
+	// Target narrows the alert to this token alone.
+	//
+	// Without it a match spans every token in the sequence. Marking one lets a
+	// rule require surrounding context while pointing at only the part the
+	// writer should change -- "flag the space, but only between these two
+	// words".
+	Target bool
+
 	re       *rx.Regexp
 	Negate   bool
 	optional bool
@@ -133,7 +142,27 @@ func tokensMatch(token NLPToken, word tag.Token) bool {
 	return true
 }
 
-func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, history []int) ([]string, int) {
+// match describes one sequence hit: the matched words' text, the index of the
+// anchor word, and the range of word indices the match covers.
+//
+// The index range is what lets Run report where the match actually is. The
+// text alone is not enough: the same sequence can occur more than once, and
+// re-joining the words does not reproduce the source when the spacing is
+// irregular.
+type match struct {
+	text  []string
+	index int
+	lo    int
+	hi    int
+
+	// wordAt maps a position in the expanded token slice to the word it
+	// matched, so a targeted token can be resolved back to its span.
+	wordAt map[int]int
+}
+
+func (m match) ok() bool { return len(m.text) > 0 && m.lo >= 0 && m.hi >= m.lo }
+
+func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, history []int) match {
 	var text []string
 
 	toks := chk.Tokens
@@ -141,6 +170,8 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 	sizeT := len(toks)
 	sizeW := len(words)
 	index := 0
+	lo, hi := -1, -1
+	wordAt := map[int]int{}
 
 	for jdx, tok := range words {
 		if tokensMatch(target, tok) && !core.IntInSlice(jdx, history) {
@@ -157,12 +188,14 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 				// side to check -- hence, `idx > 0`.
 				for i := 1; idx-i >= 0; i++ {
 					if jdx-i < 0 {
-						return []string{}, index
+						return match{index: index, lo: -1, hi: -1}
 					}
 					tok := toks[idx-i]
 
 					word := words[jdx-i]
 					text = append([]string{word.Text}, text...)
+					lo = jdx - i
+					wordAt[idx-i] = jdx - i
 
 					// NOTE: We have to perform this conversion because the token slice is made
 					// with the right-hand orientation in mind. For example,
@@ -176,7 +209,7 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 
 					mat := tokensMatch(tok, word)
 					if !mat && !tok.optional {
-						return []string{}, index
+						return match{index: index, lo: -1, hi: -1}
 					} else if mat && tok.optional {
 						break
 					}
@@ -189,16 +222,21 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 				// side to check.
 				for i := 0; idx+i < sizeT; i++ {
 					if jdx+i >= sizeW {
-						return []string{}, index
+						return match{index: index, lo: -1, hi: -1}
 					}
 					tok := toks[idx+i]
 
 					word := words[jdx+i]
 					text = append(text, word.Text)
+					if lo < 0 || jdx+i < lo {
+						lo = jdx + i
+					}
+					hi = jdx + i
+					wordAt[idx+i] = jdx + i
 
 					mat := tokensMatch(tok, word)
 					if !mat && !tok.optional {
-						return []string{}, index
+						return match{index: index, lo: -1, hi: -1}
 					} else if mat && tok.optional {
 						break
 					}
@@ -208,7 +246,7 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 		}
 	}
 
-	return text, index
+	return match{text: text, index: index, lo: lo, hi: hi, wordAt: wordAt}
 }
 
 func stepsToString(steps []string) string {
@@ -243,6 +281,67 @@ func stepsToString(steps []string) string {
 	return strings.TrimSpace(sb.String())
 }
 
+// locate returns the span of a match within txt, plus the matched text.
+//
+// When the tokens carry offsets, the span is taken straight from them, so it
+// is exact even when the sequence occurs more than once or the source spacing
+// is irregular. Without offsets we fall back to rebuilding the text and
+// searching for it, which is what Vale did before tokens had positions; that
+// path returns nil rather than a negative span when the search fails.
+func (s Sequence) locate(txt string, words []tag.Token, m match, positioned bool) ([]int, string) {
+	if positioned && m.hi < len(words) {
+		lo, hi := m.lo, m.hi
+		if tlo, thi, ok := s.targetRange(m); ok {
+			lo, hi = tlo, thi
+		}
+
+		start := words[lo].Start
+		end := words[hi].Start + len(words[hi].Text)
+		if start >= 0 && end <= len(txt) && start < end {
+			return []int{start, end}, txt[start:end]
+		}
+	}
+
+	seq := stepsToString(m.text)
+	if ssp := strings.Index(txt, seq); ssp >= 0 {
+		return []int{ssp, ssp + len(seq)}, seq
+	}
+	return nil, seq
+}
+
+// targetRange returns the span of words covered by the rule's `target`
+// tokens.
+//
+// Several tokens may be marked, in which case the range runs from the first to
+// the last -- a target of two words reports both, not just one. Unmarked
+// tokens between them are included, since the result has to be a single
+// contiguous span.
+func (s Sequence) targetRange(m match) (int, int, bool) {
+	lo, hi := -1, -1
+	for i := range s.Tokens {
+		if !s.Tokens[i].Target {
+			continue
+		}
+		w, ok := m.wordAt[i]
+		if !ok {
+			// A targeted token that matched nothing -- an optional or skipped
+			// one. Narrowing to a range we cannot fully resolve would report
+			// the wrong span, so fall back to the whole match.
+			return 0, 0, false
+		}
+		if lo < 0 || w < lo {
+			lo = w
+		}
+		if w > hi {
+			hi = w
+		}
+	}
+	if lo < 0 {
+		return 0, 0, false
+	}
+	return lo, hi, true
+}
+
 // Run looks for the user-defined sequence of tokens.
 func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert, error) {
 	var alerts []core.Alert
@@ -252,26 +351,43 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 	// This is *always* sentence-scoped.
 	words := nlp.TextToTokens(blk.Text, &f.NLP)
 
+	// A remote NLP endpoint returns text and tags only, so we have no offsets
+	// to work from and have to fall back to locating the match by its text.
+	positioned := f.NLP.Endpoint == ""
+
 	txt := blk.Text
 	for idx, tok := range s.Tokens {
 		if !tok.Negate && tok.Pattern != "" {
 			// We're looking for our "anchor" ...
 			for _, loc := range tok.re.FindAllStringIndex(txt, -1) {
 				// These are all possible violations in `txt`:
-				steps, index := sequenceMatches(idx, s, tok, words, history)
-				history = append(history, index)
+				m := sequenceMatches(idx, s, tok, words, history)
+				history = append(history, m.index)
 
-				if len(steps) > 0 {
-					seq := stepsToString(steps)
-					ssp := strings.Index(txt, seq)
+				if m.ok() {
+					span, seq := s.locate(txt, words, m, positioned)
+					if span == nil {
+						// We matched but cannot say where; reporting a bogus
+						// span is worse than reporting nothing.
+						continue
+					}
+
+					// When the block knows where it sits in the document, hand
+					// back an absolute offset. Otherwise the span is
+					// block-relative and has to be located by searching, which
+					// resolves every repeat of a sentence to the first one.
+					absolute := blk.Offset >= 0
+					if absolute {
+						span = []int{blk.Offset + span[0], blk.Offset + span[1]}
+					}
 
 					a := core.Alert{
 						Check: s.Name, Severity: s.Level, Link: s.Link,
-						Span: []int{ssp, ssp + len(seq)}, Hide: false,
+						Span: span, Hide: false, HasByteOffsets: absolute,
 						Match: seq, Action: s.Action}
 
 					a.Message, a.Description = formatMessages(s.Message,
-						s.Description, steps...)
+						s.Description, m.text...)
 					a.Offset = offset
 
 					alerts = append(alerts, a)

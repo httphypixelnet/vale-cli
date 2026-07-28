@@ -13,6 +13,15 @@ type Block struct {
 	Scope   string // section selector
 	Parent  string // parent (fully-qualfied) selector
 	Text    string // text content
+
+	// Offset is where Text begins within Context, or -1 when that is not
+	// known.
+	//
+	// Checks that can report byte offsets need this to place a match: without
+	// it, a match has to be located by searching Context for its text, which
+	// finds the first occurrence rather than the one that matched. A sentence
+	// repeated in a document is the common case.
+	Offset int
 }
 
 // NewBlock makes a new Block with prepared text and a Selector.
@@ -21,9 +30,14 @@ func NewBlock(ctx, txt, sel string) Block {
 }
 
 // NewLinedBlock creates a Block with an already-known location.
+//
+// The block's offset is 0 when it *is* its own context, and otherwise unknown;
+// callers that carve a block out of a larger one should set Offset themselves.
 func NewLinedBlock(ctx, txt, sel string, line int) Block {
+	offset := -1
 	if ctx == "" {
 		ctx = txt
+		offset = 0
 	}
 
 	return Block{
@@ -31,7 +45,34 @@ func NewLinedBlock(ctx, txt, sel string, line int) Block {
 		Text:    txt,
 		Scope:   sel,
 		Parent:  sel,
-		Line:    line}
+		Line:    line,
+		Offset:  offset}
+}
+
+// at returns a copy of blk positioned at the given offset within its context.
+func (b Block) at(offset int) Block {
+	b.Offset = offset
+	return b
+}
+
+// resolveOffset returns where Text sits within Context.
+//
+// Blocks built from markup are handed a context they were carved out of but
+// not told where, so their offset starts out unknown. It can still be
+// recovered when Text occurs exactly once -- and only then: with several
+// occurrences there is no way to tell which one this block is, and guessing
+// would reintroduce the mislocation this is meant to prevent.
+func (b *Block) resolveOffset() int {
+	if b.Offset >= 0 {
+		return b.Offset
+	}
+	if b.Text == b.Context {
+		return 0
+	}
+	if strings.Count(b.Context, b.Text) == 1 {
+		return strings.Index(b.Context, b.Text)
+	}
+	return -1
 }
 
 // Info handles NLP-related tasks.
@@ -69,26 +110,54 @@ func (n *Info) Compute(block *Block) ([]Block, error) {
 	return n.doNLP(block, seg)
 }
 
+// offsetOf locates piece within blk.Text and returns its offset in blk's
+// context, or -1 if it cannot be placed.
+//
+// cursor advances past each piece so that repeated text resolves to successive
+// occurrences rather than always the first -- which is the whole point of
+// tracking offsets instead of searching for them later.
+func offsetOf(blk *Block, base int, piece string, cursor *int) int {
+	if base < 0 || *cursor > len(blk.Text) {
+		return -1
+	}
+
+	i := strings.Index(blk.Text[*cursor:], piece)
+	if i < 0 {
+		// A segmenter that rewrites text (a remote endpoint, say) can return
+		// something that is not a substring of the input.
+		return -1
+	}
+
+	start := *cursor + i
+	*cursor = start + len(piece)
+
+	return base + start
+}
+
 func (n *Info) doNLP(blk *Block, seg segmenter) ([]Block, error) {
 	blks := []Block{}
 
 	ctx := blk.Context
 	idx := blk.Line
+	base := blk.resolveOffset()
 
 	if n.Splitting {
+		cursor := 0
 		for _, p := range strings.SplitAfter(blk.Text, "\n\n") {
-			blks = append(
-				blks, NewLinedBlock(ctx, p, "paragraph."+blk.Scope, idx))
+			b := NewLinedBlock(ctx, p, "paragraph."+blk.Scope, idx)
+			blks = append(blks, b.at(offsetOf(blk, base, p, &cursor)))
 		}
 	}
 
 	if n.Segmentation {
+		cursor := 0
 		for _, s := range seg(blk.Text) {
 			s = strings.TrimSpace(s)
-			if s != "" {
-				blks = append(
-					blks, NewLinedBlock(ctx, s, "sentence."+blk.Scope, idx))
+			if s == "" {
+				continue
 			}
+			b := NewLinedBlock(ctx, s, "sentence."+blk.Scope, idx)
+			blks = append(blks, b.at(offsetOf(blk, base, s, &cursor)))
 		}
 	}
 
