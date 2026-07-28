@@ -7,9 +7,9 @@ import (
 
 	"golang.org/x/exp/maps"
 
-	"github.com/errata-ai/regexp2"
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 )
 
 // Substitution switches the values of Swap for its keys.
@@ -18,9 +18,9 @@ type Substitution struct {
 	Exceptions []string
 	repl       []string
 	Swap       map[string]string
-	exceptRe   *regexp2.Regexp
-	phraseRe   *regexp2.Regexp
-	pattern    *regexp2.Regexp
+	exceptRe   *rx.Regexp
+	phraseRe   *rx.Regexp
+	pattern    *rx.Regexp
 	Ignorecase bool
 	Nonword    bool
 	Vocab      bool
@@ -82,7 +82,7 @@ func NewSubstitution(cfg *core.Config, generic baseCheck, path string) (Substitu
 	}
 	regex = fmt.Sprintf(regex, strings.TrimRight(tokens, "|"))
 
-	re, err = regexp2.CompileStd(regex)
+	re, err = rx.Compile(regex)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}
@@ -243,7 +243,7 @@ func convertMessage(s string) string {
 }
 
 func convertCaptureGroups(msg string) (string, error) {
-	captureOpen := regexp2.MustCompileStd(`(?<!\\)\((?!\?)`)
+	captureOpen := rx.MustCompile(`(?<!\\)\((?!\?)`)
 	return captureOpen.Replace(msg, "(?:", -1, -1)
 }
 
@@ -258,7 +258,7 @@ func subMsg(s Substitution, index int, observed string) (string, error) {
 	// TODO: Why do we need to check for this?
 	//
 	// This feels like a bug in `regexp2`.
-	hasIndex := regexp2.MustCompileStd(`\$\d+`)
+	hasIndex := rx.MustCompile(`\$\d+`)
 	if !hasIndex.MatchStringStd(expected) {
 		return expected, nil
 	}
@@ -268,7 +268,7 @@ func subMsg(s Substitution, index int, observed string) (string, error) {
 		msg = `(?i)` + msg
 	}
 
-	msgRe := regexp2.MustCompileStd(msg)
+	msgRe := rx.MustCompile(msg)
 	return msgRe.Replace(observed, expected, -1, -1)
 }
 

@@ -30,18 +30,6 @@ func hasAnySuffix(s string, suffixes []string) bool {
 	}
 	return false
 }
-
-func hasAnyIndex(s string, suffixes []string) int {
-	n := len(s)
-	for _, suffix := range suffixes {
-		idx := strings.Index(s, suffix)
-		if idx >= 0 && n > len(suffix) {
-			return idx
-		}
-	}
-	return -1
-}
-
 func allNonLetter(s string) bool {
 	for _, r := range s {
 		if unicode.IsLetter(r) {

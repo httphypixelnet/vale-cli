@@ -3,7 +3,7 @@ package check
 import (
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
@@ -19,9 +19,9 @@ type Repetition struct {
 	Vocab      bool
 	Exceptions []string
 
-	exceptRe *regexp2.Regexp
-	phraseRe *regexp2.Regexp
-	pattern  *regexp2.Regexp
+	exceptRe *rx.Regexp
+	phraseRe *rx.Regexp
+	pattern  *rx.Regexp
 }
 
 // NewRepetition creates a new `repetition`-based rule.
@@ -51,7 +51,7 @@ func NewRepetition(cfg *core.Config, generic baseCheck, path string) (Repetition
 	}
 	regex += `(` + strings.Join(rule.Tokens, "|") + `)`
 
-	made, err := regexp2.CompileStd(regex)
+	made, err := rx.Compile(regex)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}

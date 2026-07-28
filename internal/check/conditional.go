@@ -3,7 +3,7 @@ package check
 import (
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
@@ -13,11 +13,11 @@ import (
 type Conditional struct {
 	Definition `mapstructure:",squash"`
 	Exceptions []string
-	patterns   []*regexp2.Regexp
+	patterns   []*rx.Regexp
 	First      string
 	Second     string
-	exceptRe   *regexp2.Regexp
-	phraseRe   *regexp2.Regexp
+	exceptRe   *rx.Regexp
+	phraseRe   *rx.Regexp
 	Ignorecase bool
 	Vocab      bool
 
@@ -39,7 +39,7 @@ func hasCaptureGroup(pattern string) bool {
 
 // NewConditional creates a new `conditional`-based rule.
 func NewConditional(cfg *core.Config, generic baseCheck, path string) (Conditional, error) {
-	var expression []*regexp2.Regexp
+	var expression []*rx.Regexp
 	rule := Conditional{Vocab: true}
 
 	err := decodeRule(generic, &rule)
@@ -59,14 +59,14 @@ func NewConditional(cfg *core.Config, generic baseCheck, path string) (Condition
 	rule.exceptRe = re
 	rule.phraseRe = buildPhraseRe(rule.Exceptions, cfg.AcceptedTokens, rule.Vocab)
 
-	re, err = regexp2.CompileStd(rule.Second)
+	re, err = rx.Compile(rule.Second)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}
 	expression = append(expression, re)
 	rule.secondHasGroup = hasCaptureGroup(rule.Second)
 
-	re, err = regexp2.CompileStd(rule.First)
+	re, err = rx.Compile(rule.First)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}

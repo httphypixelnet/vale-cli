@@ -3,15 +3,15 @@ package check
 import (
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/jdkato/prose/v3/strcase"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 )
 
-var reNumberList = regexp2.MustCompileStd(`\d+\.`)
+var reNumberList = rx.MustCompile(`\d+\.`)
 
-var varToFunc = map[string]func(string, *regexp2.Regexp) (string, bool){
+var varToFunc = map[string]func(string, *rx.Regexp) (string, bool){
 	"$lower": lower,
 	"$upper": upper,
 }
@@ -35,7 +35,7 @@ func wasIndicator(indicators []string) strcase.IndicatorFunc {
 	}
 }
 
-func isMatch(r *regexp2.Regexp, s string) bool {
+func isMatch(r *rx.Regexp, s string) bool {
 	// TODO: `r.String() != ""`?
 	//
 	// Should we ensure that empty regexes == `nil`?
@@ -49,17 +49,17 @@ func isMatch(r *regexp2.Regexp, s string) bool {
 	return match
 }
 
-func lower(s string, re *regexp2.Regexp) (string, bool) {
+func lower(s string, re *rx.Regexp) (string, bool) {
 	expected := strings.ToLower(s)
 	return expected, s == expected || isMatch(re, s)
 }
 
-func upper(s string, re *regexp2.Regexp) (string, bool) {
+func upper(s string, re *rx.Regexp) (string, bool) {
 	expected := strings.ToUpper(s)
 	return expected, s == expected || isMatch(re, s)
 }
 
-func title(s string, except *regexp2.Regexp, tc *strcase.TitleConverter, threshold float64) (string, bool) {
+func title(s string, except *rx.Regexp, tc *strcase.TitleConverter, threshold float64) (string, bool) {
 	count := 0.0
 	words := 0.0
 
@@ -67,7 +67,7 @@ func title(s string, except *regexp2.Regexp, tc *strcase.TitleConverter, thresho
 	if except != nil && except.String() != "" {
 		ps = except.String() + "|" + ps
 	}
-	re := regexp2.MustCompileStd(ps)
+	re := rx.MustCompile(ps)
 
 	expected := tc.Convert(s)
 	expectedTokens := re.FindAllString(expected, -1)
@@ -97,7 +97,7 @@ func title(s string, except *regexp2.Regexp, tc *strcase.TitleConverter, thresho
 	return expected, (count / words) >= threshold
 }
 
-func sentence(s string, except *regexp2.Regexp, sc *strcase.SentenceConverter, threshold float64) (string, bool) {
+func sentence(s string, except *rx.Regexp, sc *strcase.SentenceConverter, threshold float64) (string, bool) {
 	count := 0.0
 	words := 0.0
 
@@ -105,7 +105,7 @@ func sentence(s string, except *regexp2.Regexp, sc *strcase.SentenceConverter, t
 	if except != nil && except.String() != "" {
 		ps = except.String() + "|" + ps
 	}
-	re := regexp2.MustCompileStd(ps)
+	re := rx.MustCompile(ps)
 
 	expected := sc.Convert(s)
 	expectedTokens := re.FindAllString(expected, -1)

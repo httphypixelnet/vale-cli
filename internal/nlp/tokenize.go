@@ -56,13 +56,14 @@ func (t *IterTokenizer) doSplit(token string) []string {
 			break
 		}
 		last = StrLen(token)
-		if hasAnyPrefix(token, t.prefixes) {
+		switch {
+		case hasAnyPrefix(token, t.prefixes):
 			// Remove prefixes -- e.g., $100 -> [$, 100].
 			token = token[1:]
-		} else if hasAnySuffix(token, t.suffixes) {
+		case hasAnySuffix(token, t.suffixes):
 			// Remove suffixes -- e.g., Well) -> [Well, )].
 			token = token[:len(token)-1]
-		} else {
+		default:
 			tokens = addToken(token, tokens)
 		}
 	}

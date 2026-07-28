@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
@@ -17,9 +17,9 @@ type Existence struct {
 	Tokens     []string
 	// `exceptions` (`array`): An array of strings to be ignored.
 	Exceptions []string
-	exceptRe   *regexp2.Regexp
-	phraseRe   *regexp2.Regexp
-	pattern    *regexp2.Regexp
+	exceptRe   *rx.Regexp
+	phraseRe   *rx.Regexp
+	pattern    *rx.Regexp
 	Append     bool
 	IgnoreCase bool
 	Nonword    bool
@@ -68,7 +68,7 @@ func NewExistence(cfg *core.Config, generic baseCheck, path string) (Existence, 
 	}
 	regex = fmt.Sprintf(regex, strings.Join(parsed, "|"))
 
-	re, err = regexp2.CompileStd(regex)
+	re, err = rx.Compile(regex)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}

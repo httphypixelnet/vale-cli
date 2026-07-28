@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 
@@ -334,14 +334,14 @@ func matchToken(expected, observed string, ignorecase bool) bool {
 		p = ignoreCase + p
 	}
 
-	r, err := regexp2.CompileStd(fmt.Sprintf(tokenTemplate, p))
+	r, err := rx.Compile(fmt.Sprintf(tokenTemplate, p))
 	if core.IsPhrase(expected) || err != nil {
 		return expected == observed
 	}
 	return r.MatchStringStd(observed)
 }
 
-func updateExceptions(previous []string, current []string, vocab bool) (*regexp2.Regexp, error) {
+func updateExceptions(previous []string, current []string, vocab bool) (*rx.Regexp, error) {
 	if vocab {
 		previous = append(previous, current...)
 	}
@@ -369,10 +369,10 @@ func updateExceptions(previous []string, current []string, vocab bool) (*regexp2
 
 	regex = fmt.Sprintf(regex, strings.Join(previous, "|"))
 	if len(previous) > 0 {
-		return regexp2.CompileStd(regex)
+		return rx.Compile(regex)
 	}
 
-	return &regexp2.Regexp{}, nil
+	return &rx.Regexp{}, nil
 }
 
 // buildPhraseRe compiles a regex matching the multi-word entries among the
@@ -383,7 +383,7 @@ func updateExceptions(previous []string, current []string, vocab bool) (*regexp2
 //
 // Returns nil when there are no multi-word terms (or one fails to compile, in
 // which case `updateExceptions` surfaces the error).
-func buildPhraseRe(previous, current []string, vocab bool) *regexp2.Regexp {
+func buildPhraseRe(previous, current []string, vocab bool) *rx.Regexp {
 	terms := append([]string{}, previous...)
 	if vocab {
 		terms = append(terms, current...)
@@ -400,7 +400,7 @@ func buildPhraseRe(previous, current []string, vocab bool) *regexp2.Regexp {
 		return nil
 	}
 
-	re, err := regexp2.CompileStd(ignoreCase + `\b(?:` + strings.Join(phrases, "|") + `)\b`)
+	re, err := rx.Compile(ignoreCase + `\b(?:` + strings.Join(phrases, "|") + `)\b`)
 	if err != nil {
 		return nil
 	}
@@ -410,7 +410,7 @@ func buildPhraseRe(previous, current []string, vocab bool) *regexp2.Regexp {
 // withinPhrase reports whether the span `loc` falls entirely within a match of
 // `phraseRe` (an accepted multi-word phrase) in `txt`. Both `loc` and the
 // phrase spans are rune offsets, as returned by regexp2's FindAllStringIndex.
-func withinPhrase(phraseRe *regexp2.Regexp, txt string, loc []int) bool {
+func withinPhrase(phraseRe *rx.Regexp, txt string, loc []int) bool {
 	if phraseRe == nil {
 		return false
 	}

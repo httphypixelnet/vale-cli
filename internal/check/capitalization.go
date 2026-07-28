@@ -1,7 +1,7 @@
 package check
 
 import (
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/jdkato/prose/v3/strcase"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -13,7 +13,7 @@ type Capitalization struct {
 	Definition `mapstructure:",squash"`
 	// `match` (`string`): $title, $sentence, $lower, $upper, or a pattern.
 	Match string
-	Check func(s string, re *regexp2.Regexp) (string, bool)
+	Check func(s string, re *rx.Regexp) (string, bool)
 	// `style` (`string`): AP or Chicago; only applies when match is set to
 	// $title.
 	Style string
@@ -32,7 +32,7 @@ type Capitalization struct {
 	// capitalization.
 	Prefix string
 
-	exceptRe *regexp2.Regexp
+	exceptRe *rx.Regexp
 }
 
 // NewCapitalization creates a new `capitalization`-based rule.
@@ -84,7 +84,7 @@ func NewCapitalization(cfg *core.Config, generic baseCheck, path string) (Capita
 				strcase.UsingPrefix(rule.Prefix),
 			)
 		}
-		rule.Check = func(s string, re *regexp2.Regexp) (string, bool) {
+		rule.Check = func(s string, re *rx.Regexp) (string, bool) {
 			return title(s, re, tc, rule.Threshold)
 		}
 	} else if rule.Match == "$sentence" {
@@ -93,17 +93,17 @@ func NewCapitalization(cfg *core.Config, generic baseCheck, path string) (Capita
 			strcase.UsingPrefix(rule.Prefix),
 			strcase.UsingIndicator(wasIndicator(rule.Indicators)),
 		)
-		rule.Check = func(s string, re *regexp2.Regexp) (string, bool) {
+		rule.Check = func(s string, re *rx.Regexp) (string, bool) {
 			return sentence(s, re, sc, rule.Threshold)
 		}
 	} else if f, ok := varToFunc[rule.Match]; ok {
 		rule.Check = f
 	} else {
-		re2, errc := regexp2.CompileStd(rule.Match)
+		re2, errc := rx.Compile(rule.Match)
 		if errc != nil {
 			return rule, core.NewE201FromPosition(errc.Error(), path, 1)
 		}
-		rule.Check = func(s string, r *regexp2.Regexp) (string, bool) {
+		rule.Check = func(s string, r *rx.Regexp) (string, bool) {
 			return re2.String(), re2.MatchStringStd(s) || isMatch(r, s)
 		}
 	}

@@ -3,7 +3,7 @@ package check
 import (
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
@@ -15,7 +15,7 @@ type Occurrence struct {
 	Token      string
 	Max        int
 	Min        int
-	pattern    *regexp2.Regexp
+	pattern    *rx.Regexp
 	Ignorecase bool
 }
 
@@ -39,7 +39,7 @@ func NewOccurrence(_ *core.Config, generic baseCheck, path string) (Occurrence, 
 	}
 
 	regex += `(?:` + rule.Token + `)`
-	re, err := regexp2.CompileStd(regex)
+	re, err := rx.Compile(regex)
 	if err != nil {
 		return rule, core.NewE201FromPosition(err.Error(), path, 1)
 	}

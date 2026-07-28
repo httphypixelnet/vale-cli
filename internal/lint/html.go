@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/glob"
@@ -51,7 +51,7 @@ func applyBlockPatterns(c *core.Config, exts extensionConfig, content string) (s
 			return s, err
 		} else if sec.Match(exts.Normed) || sec.Match(exts.Real) {
 			for _, r := range regexes {
-				pat, errc := regexp2.CompileStd(r)
+				pat, errc := rx.Compile(r)
 				if errc != nil { //nolint:gocritic
 					return s, core.NewE201FromTarget(
 						errc.Error(),
@@ -100,7 +100,7 @@ func applyInlinePatterns(c *core.Config, exts extensionConfig, content string) (
 			return content, err
 		} else if sec.Match(exts.Normed) || sec.Match(exts.Real) {
 			for _, r := range regexes {
-				pat, errc := regexp2.CompileStd(r)
+				pat, errc := rx.Compile(r)
 				if errc != nil {
 					return content, core.NewE201FromTarget(
 						errc.Error(),

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/jdkato/prose/v3/tag"
 	"github.com/mitchellh/mapstructure"
 
@@ -17,7 +17,7 @@ type NLPToken struct {
 	Pattern  string
 	Tag      string
 	Skip     int
-	re       *regexp2.Regexp
+	re       *rx.Regexp
 	Negate   bool
 	optional bool
 	start    bool
@@ -65,7 +65,7 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 				false)
 			regex = fmt.Sprintf(regex, token.Pattern)
 
-			re, errc := regexp2.CompileStd(regex)
+			re, errc := rx.Compile(regex)
 			if errc != nil {
 				return rule, core.NewE201FromPosition(errc.Error(), path, 1)
 			}
@@ -115,7 +115,7 @@ func makeTokens(s *Sequence, generic baseCheck) error {
 }
 
 func tokensMatch(token NLPToken, word tag.Token) bool {
-	failedTag, err := regexp2.MatchString(token.Tag, word.Tag)
+	failedTag, err := rx.MatchString(token.Tag, word.Tag)
 	if err != nil {
 		// FIXME: return the error instead ...
 		panic(err)

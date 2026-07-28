@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -12,7 +12,7 @@ import (
 )
 
 type step struct {
-	pattern *regexp2.Regexp
+	pattern *rx.Regexp
 	subs    []string
 }
 
@@ -64,7 +64,7 @@ func NewConsistency(cfg *core.Config, generic baseCheck, path string) (Consisten
 		chkRE = fmt.Sprintf("(?P<%s>%s)|(?P<%s>%s)", subs[0], v1, subs[1], v2)
 		chkRE = fmt.Sprintf(regex, chkRE)
 
-		re, errc := regexp2.CompileStd(chkRE)
+		re, errc := rx.Compile(chkRE)
 		if errc != nil {
 			return rule, core.NewE201FromPosition(errc.Error(), path, 1)
 		}

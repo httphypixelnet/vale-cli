@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/errata-ai/regexp2"
+	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -34,8 +34,8 @@ type Spelling struct {
 	Dic          string
 	Dicpath      string
 	Threshold    int
-	exceptRe     *regexp2.Regexp
-	phraseRe     *regexp2.Regexp
+	exceptRe     *rx.Regexp
+	phraseRe     *rx.Regexp
 	gs           *spell.Checker
 	Custom       bool
 	Append       bool
@@ -82,7 +82,7 @@ func addExceptions(s *Spelling, generic baseCheck, cfg *core.Config) error { //n
 			term = `\b` + term + `\b`
 		}
 		s.Exceptions = append(s.Exceptions, term)
-		s.exceptRe = regexp2.MustCompileStd(
+		s.exceptRe = rx.MustCompile(
 			ignoreCase + strings.Join(s.Exceptions, "|"))
 	}
 
@@ -186,7 +186,7 @@ func (s Spelling) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert
 	// spaces, which preserves the byte offsets of every other word. See #1035.
 	checkTxt := txt
 	if s.phraseRe != nil {
-		masked, err := s.phraseRe.ReplaceFunc(txt, func(m regexp2.Match) string {
+		masked, err := s.phraseRe.ReplaceFunc(txt, func(m rx.Match) string {
 			return strings.Repeat(" ", len(m.String()))
 		}, -1, -1)
 		if err == nil {
