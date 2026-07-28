@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/errata-ai/regexp2"
-	"github.com/jdkato/twine/nlp/tag"
+	"github.com/jdkato/prose/v3/tag"
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/errata-ai/vale/v3/internal/core"

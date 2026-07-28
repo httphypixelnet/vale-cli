@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jdkato/twine/summarize"
+	"github.com/jdkato/prose/v3/summarize"
 
 	"github.com/errata-ai/vale/v3/internal/glob"
 	"github.com/errata-ai/vale/v3/internal/nlp"

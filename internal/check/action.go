@@ -12,7 +12,7 @@ import (
 
 	"github.com/d5/tengo/v2"
 	"github.com/d5/tengo/v2/stdlib"
-	"github.com/jdkato/twine/strcase"
+	"github.com/jdkato/prose/v3/strcase"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 )

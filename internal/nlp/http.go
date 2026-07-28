@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/jdkato/twine/nlp/tag"
+	"github.com/jdkato/prose/v3/tag"
 )
 
 type SegmentResult struct {

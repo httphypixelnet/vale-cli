@@ -3,7 +3,7 @@ package check
 import (
 	"fmt"
 
-	"github.com/jdkato/twine/summarize"
+	"github.com/jdkato/prose/v3/summarize"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"

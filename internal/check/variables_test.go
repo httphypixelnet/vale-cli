@@ -3,7 +3,7 @@ package check
 import (
 	"testing"
 
-	"github.com/jdkato/twine/strcase"
+	"github.com/jdkato/prose/v3/strcase"
 )
 
 type changeCase struct {

@@ -20,20 +20,6 @@ func NewBlock(ctx, txt, sel string) Block {
 	return NewLinedBlock(ctx, txt, sel, -1)
 }
 
-// NewBlockWithParent makes a new Block with prepared text, a Selector, and a parent.
-func NewBlockWithParent(ctx, txt, sel, parent string) Block {
-	if ctx == "" {
-		ctx = txt
-	}
-
-	return Block{
-		Context: ctx,
-		Text:    txt,
-		Scope:   sel,
-		Parent:  parent,
-		Line:    -1}
-}
-
 // NewLinedBlock creates a Block with an already-known location.
 func NewLinedBlock(ctx, txt, sel string, line int) Block {
 	if ctx == "" {

@@ -2,7 +2,7 @@ package check
 
 import (
 	"github.com/errata-ai/regexp2"
-	"github.com/jdkato/twine/strcase"
+	"github.com/jdkato/prose/v3/strcase"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jdkato/twine/nlp/tag"
+	"github.com/jdkato/prose/v3/tag"
 	"github.com/pterm/pterm"
 
 	"github.com/errata-ai/vale/v3/internal/check"
