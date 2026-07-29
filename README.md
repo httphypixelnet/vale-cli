@@ -12,7 +12,7 @@
 <table>
 <thead>
 <tr>
-<th><a href="https://vale.sh/docs/vale-cli/installation/">Docs</a></th>
+<th><a href="https://docs.vale.sh/topics/installation">Docs</a></th>
 <th><a href="https://studio.vale.sh/">Vale Studio</a></th>
 <th><a href="https://vale.sh/hub/">Package Hub</a></th>
 <th><a href="https://vale.sh/explorer/">Rule Explorer</a></th>

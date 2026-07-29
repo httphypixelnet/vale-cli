@@ -27,6 +27,7 @@ type Substitution struct {
 	Capitalize bool
 
 	msgMap []string
+
 	// Deprecated
 	POS string
 }
@@ -80,6 +81,7 @@ func NewSubstitution(cfg *core.Config, generic baseCheck, path string) (Substitu
 		tokens += `(` + regexstr + `)|`
 		replacements = append(replacements, replacement)
 	}
+
 	regex = fmt.Sprintf(regex, strings.TrimRight(tokens, "|"))
 
 	re, err = rx.Compile(regex)
@@ -184,6 +186,11 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 					anchor(&a, blk)
 					alerts = append(alerts, a)
 				}
+
+				// An alternation sets exactly one group, so the rest of the
+				// slots only hold -1. Reading them is free per slot and not
+				// free per match when a rule has hundreds of swaps.
+				break
 			}
 		}
 	}

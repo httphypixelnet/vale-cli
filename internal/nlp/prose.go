@@ -1,6 +1,8 @@
 package nlp
 
 import (
+	"fmt"
+	"os"
 	"sync"
 
 	"github.com/jdkato/prose/v3/segment"
@@ -40,11 +42,79 @@ func (sentenceTokenizer) Segment(text string) []string {
 // SentenceTokenizer splits text into sentences.
 var SentenceTokenizer sentenceTokenizer
 
-// tagger assigns part-of-speech tags.
+// taggers holds one tagger per model, built on first use.
+//
+// A style may name more than one: rules ported from another checker want that
+// checker's idea of a noun, while everything already written expects prose's.
+var (
+	taggersMu sync.Mutex
+	taggers   = map[string]tag.Interface{}
+)
+
+// RegisterModel makes a tagger available to rules under the given name,
+// reading its dictionary from path.
+//
+// The dictionary is Vale's existing asset kind, so a model ships, syncs and
+// resolves the same way a spelling dictionary does.
+func RegisterModel(name, path string) error {
+	taggersMu.Lock()
+	defer taggersMu.Unlock()
+
+	if _, built := taggers[name]; built {
+		return nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	entries, err := tag.ReadDictionary(f)
+	if err != nil {
+		return err
+	}
+
+	base, err := tag.New()
+	if err != nil {
+		return err
+	}
+
+	lex, err := tag.NewLexical(entries, base)
+	if err != nil {
+		return err
+	}
+	taggers[name] = lex
+
+	return nil
+}
+
+// TaggerFor returns the tagger a rule asked for.
+//
+// An unknown name is an error rather than a quiet fallback: a rule written
+// against one tagger reads differently under another, so substituting one
+// would change what the rule means.
+func TaggerFor(name string) (tag.Interface, error) {
+	if name == "" {
+		return tagger()
+	}
+
+	taggersMu.Lock()
+	defer taggersMu.Unlock()
+
+	t, ok := taggers[name]
+	if !ok {
+		return nil, fmt.Errorf("no tagger model named %q", name)
+	}
+
+	return t, nil
+}
+
+// tagger is prose's own, used by every rule that does not name a model.
 //
 // sync.OnceValues rather than a nil check: Vale lints files concurrently, so
 // a plain check-then-assign here is a data race.
-var tagger = sync.OnceValues(tag.New)
+var tagger = sync.OnceValues(func() (tag.Interface, error) { return tag.Open("") })
 
 // wordTokenizer splits a sentence into positioned words for tagging.
 //
@@ -63,9 +133,21 @@ var wordTokenizer = sync.OnceValue(func() *tokenize.Tokenizer {
 // tags; letting that context run across a sentence boundary would condition
 // the first word of each sentence on the last word of the one before it.
 func tagText(text string) []tag.Token {
-	t, err := tagger()
+	toks, err := tagTextWith("", text)
 	if err != nil {
 		panic("nlp: loading the part-of-speech model: " + err.Error())
+	}
+	return toks
+}
+
+// tagTextWith is tagText, read with the named tagger.
+//
+// An unknown model is returned as an error rather than panicked on: the name
+// comes from a rule, so it is the author's mistake to report, not a bug.
+func tagTextWith(model, text string) ([]tag.Token, error) {
+	t, err := TaggerFor(model)
+	if err != nil {
+		return nil, err
 	}
 
 	var tokens []tag.Token
@@ -81,7 +163,7 @@ func tagText(text string) []tag.Token {
 		tokens = append(tokens, found...)
 	}
 
-	return tokens
+	return tokens, nil
 }
 
 // TextToTokens converts a string to a slice of tagged tokens.
@@ -103,6 +185,21 @@ func TextToTokens(text string, nlp *Info) []tag.Token {
 	return result.Tokens
 }
 
+// textToTokensWith converts text to tagged tokens with the named tagger.
+func textToTokensWith(model, text string, info *Info) ([]tag.Token, error) {
+	if info == nil || info.Endpoint == "" {
+		return tagTextWith(model, text)
+	}
+
+	// A remote endpoint does its own tagging, so there is no model to choose.
+	result, err := pos(text, info.Lang, info.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Tokens, nil
+}
+
 // TokenCache remembers the tagging of each block within one document.
 //
 // Every `sequence` rule tags the sentence it is given, and a style may hold
@@ -118,19 +215,28 @@ type TokenCache struct {
 
 // Tokens returns the tagged tokens of text, tagging it only the first time.
 func (c *TokenCache) Tokens(text string, info *Info) []tag.Token {
+	toks, _ := c.TokensWith("", text, info)
+	return toks
+}
+
+// TokensWith is Tokens, read with the named tagger.
+func (c *TokenCache) TokensWith(model, text string, info *Info) ([]tag.Token, error) {
 	if c == nil {
-		return TextToTokens(text, info)
+		return textToTokensWith(model, text, info)
 	}
 
 	if toks, ok := c.tagged[text]; ok {
-		return toks
+		return toks, nil
 	}
 
-	toks := TextToTokens(text, info)
+	toks, err := textToTokensWith(model, text, info)
+	if err != nil {
+		return nil, err
+	}
 	if c.tagged == nil {
 		c.tagged = map[string][]tag.Token{}
 	}
 	c.tagged[text] = toks
 
-	return toks
+	return toks, nil
 }

@@ -26,30 +26,30 @@ var commentControlMatchesRE = regexp.MustCompile(`^vale (.+\..+)(\[.+\]) = (YES|
 
 // A File represents a linted text file.
 type File struct {
-	NLP        nlp.Info          // -
-	Summary    bytes.Buffer      // holds content to be included in summarization checks
-	Alerts     []Alert           // all alerts associated with this file
-	BaseStyles []string          // base style assigned in .vale
-	Lines      []string          // the File's Content split into lines
-	Sequences  []string          // tracks various info (e.g., defined abbreviations)
-	Content    string            // the raw file contents
-	Format     string            // 'code', 'markup' or 'prose'
-	NormedExt  string            // the normalized extension (see util/format.go)
-	Path       string            // the full path
-	NormedPath string            // the normalized path
-	Transform  string            // XLST transform
-	RealExt    string            // actual file extension
-	Checks     map[string]bool   // syntax-specific checks assigned in .vale
-	ChkToCtx   map[string]string // maps a temporary context to a particular check
-	Comments   map[string]bool   // comment control statements
-	Metrics    map[string]int    // count-based metrics
-	history    map[string]int    // -
-	limits     map[string]int    // -
-	tags       *nlp.TokenCache   // tagging shared by every rule that needs it
-	lineIdx    []int             // byte offset of each line start in lineIdxCtx
-	lineIdxCtx string            // the context lineIdx was built from
-	simple     bool              // -
-	Lookup     bool              // -
+	NLP        nlp.Info                   // -
+	Summary    bytes.Buffer               // holds content to be included in summarization checks
+	Alerts     []Alert                    // all alerts associated with this file
+	BaseStyles []string                   // base style assigned in .vale
+	Lines      []string                   // the File's Content split into lines
+	Sequences  []string                   // tracks various info (e.g., defined abbreviations)
+	Content    string                     // the raw file contents
+	Format     string                     // 'code', 'markup' or 'prose'
+	NormedExt  string                     // the normalized extension (see util/format.go)
+	Path       string                     // the full path
+	NormedPath string                     // the normalized path
+	Transform  string                     // XLST transform
+	RealExt    string                     // actual file extension
+	Checks     map[string]bool            // syntax-specific checks assigned in .vale
+	ChkToCtx   map[string]string          // maps a temporary context to a particular check
+	Comments   map[string]bool            // comment control statements
+	Metrics    map[string]int             // count-based metrics
+	history    map[string]int             // -
+	limits     map[string]int             // -
+	tags       map[string]*nlp.TokenCache // tagging shared by every rule, per model
+	lineIdx    []int                      // byte offset of each line start in lineIdxCtx
+	lineIdxCtx string                     // the context lineIdx was built from
+	simple     bool                       // -
+	Lookup     bool                       // -
 }
 
 // lineStarts returns the byte offset at which each line of ctx begins.
@@ -174,10 +174,26 @@ func NewFile(src string, config *Config) (*File, error) {
 // Tokens returns the tagged tokens of text, tagging it only once per document
 // however many rules ask for it.
 func (f *File) Tokens(text string) []tag.Token {
+	toks, _ := f.TokensWith("", text)
+	return toks
+}
+
+// TokensWith is Tokens, read with the named tagger.
+//
+// Two models disagree about the same sentence -- that is why a rule names
+// one -- so each is cached separately.
+func (f *File) TokensWith(model, text string) ([]tag.Token, error) {
 	if f.tags == nil {
-		f.tags = &nlp.TokenCache{}
+		f.tags = map[string]*nlp.TokenCache{}
 	}
-	return f.tags.Tokens(text, &f.NLP)
+
+	cache, ok := f.tags[model]
+	if !ok {
+		cache = &nlp.TokenCache{}
+		f.tags[model] = cache
+	}
+
+	return cache.TokensWith(model, text, &f.NLP)
 }
 
 // SortedAlerts returns all of f's alerts sorted by line and column.

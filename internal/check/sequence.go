@@ -65,8 +65,19 @@ type NLPToken struct {
 
 // Sequence looks for a user-defined sequence of tokens.
 type Sequence struct {
-	Definition   `mapstructure:",squash"`
-	Tokens       []NLPToken
+	Definition `mapstructure:",squash"`
+	Tokens     []NLPToken
+
+	// `model` (`string`): The tagger to read this rule's tags with.
+	//
+	// Rules ported from another checker are written against that checker's
+	// idea of a noun, and read differently under prose's. Naming its model
+	// here has them read as intended. A model is a dictionary under
+	// `config/dictionaries`, so it ships and syncs like any other asset.
+	//
+	// Empty means prose's own tagger, which is what every existing rule gets.
+	Model string
+
 	Ignorecase   bool
 	needsTagging bool
 }
@@ -155,6 +166,21 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 				return rule, core.NewE201FromPosition(terr.Error(), path, 1)
 			}
 			rule.Tokens[i].tokenRe = tre
+		}
+	}
+
+	// A model is a dictionary asset, resolved and loaded the same way a
+	// spelling dictionary is. Doing it here means an unreadable one is
+	// reported when the style loads rather than on the first sentence.
+	if rule.Model != "" {
+		asset := core.FindConfigAsset(cfg, rule.Model+".dict", core.DictDir)
+		if asset == "" {
+			return rule, core.NewE201FromTarget(
+				fmt.Sprintf("model %q not found in %s", rule.Model, core.DictDir),
+				rule.Model, path)
+		}
+		if merr := nlp.RegisterModel(rule.Model, asset); merr != nil {
+			return rule, core.NewE201FromTarget(merr.Error(), rule.Model, path)
 		}
 	}
 
@@ -427,7 +453,10 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 	var history []int
 
 	// This is *always* sentence-scoped.
-	words := f.Tokens(blk.Text)
+	words, terr := f.TokensWith(s.Model, blk.Text)
+	if terr != nil {
+		return nil, terr
+	}
 
 	// A remote NLP endpoint returns text and tags only, so we have no offsets
 	// to work from and have to fall back to locating the match by its text.
