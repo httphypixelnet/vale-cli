@@ -150,6 +150,10 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 							action.Params = cased
 						}
 
+						if s.MatchCase {
+							action.Params = recase(action.Params, observed)
+						}
+
 						expected = core.ToSentence(action.Params, "or")
 						// NOTE: For backwards-compatibility, we need to ensure
 						// that we don't double quote.

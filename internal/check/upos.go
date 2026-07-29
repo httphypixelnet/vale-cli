@@ -66,20 +66,41 @@ var uposWords = map[string][]string{
 }
 
 // uposTagPattern returns the Penn-tag regex for a universal tag.
+//
+// Several tags may be given, separated by `|`, for a token that may be any of
+// them -- `PRON|PROPN` for something a pronoun or a name could fill.
 func uposTagPattern(name string) (string, error) {
-	pattern, ok := uposTags[strings.ToUpper(name)]
-	if !ok {
-		return "", fmt.Errorf("unknown universal POS tag %q; expected one of %s",
-			name, strings.Join(uposNames(), ", "))
+	parts := strings.Split(name, "|")
+	out := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+
+		pattern, ok := uposTags[strings.ToUpper(part)]
+		if !ok {
+			return "", fmt.Errorf("unknown universal POS tag %q; expected one of %s",
+				part, strings.Join(uposNames(), ", "))
+		}
+		out = append(out, pattern)
 	}
-	return "^(?:" + pattern + ")$", nil
+
+	return "^(?:" + strings.Join(out, "|") + ")$", nil
 }
 
 // uposWordPattern returns the word-level constraint for a universal tag, or
 // "" when the tag needs none.
 func uposWordPattern(name string) string {
-	words, ok := uposWords[strings.ToUpper(name)]
-	if !ok {
+	var words []string
+
+	for _, part := range strings.Split(name, "|") {
+		w, ok := uposWords[strings.ToUpper(strings.TrimSpace(part))]
+		if !ok {
+			// One alternative accepts any word, so the union does too.
+			return ""
+		}
+		words = append(words, w...)
+	}
+	if len(words) == 0 {
 		return ""
 	}
 

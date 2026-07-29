@@ -435,10 +435,15 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 						span = []int{blk.Offset + span[0], blk.Offset + span[1]}
 					}
 
+					action := s.Action
+					if s.MatchCase && action.Name == "replace" {
+						action.Params = recase(action.Params, seq)
+					}
+
 					a := core.Alert{
 						Check: s.Name, Severity: s.Level, Link: s.Link,
 						Span: span, Hide: false, HasByteOffsets: absolute,
-						Match: seq, Action: s.Action}
+						Match: seq, Action: action}
 
 					a.Message, a.Description = formatMessages(s.Message,
 						s.Description, m.text...)

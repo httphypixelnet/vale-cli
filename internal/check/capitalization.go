@@ -133,6 +133,9 @@ func (c Capitalization) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]co
 
 		a.Message, a.Description = formatMessages(c.Message,
 			c.Description, blk.Text, expected)
+		// Set after makeAlert, so `matchcase` cannot reach it. That is
+		// deliberate: this rule decides the case, and re-casing its suggestion
+		// to match the text it is correcting would undo the correction.
 		a.Action = action
 
 		anchor(&a, blk)

@@ -42,6 +42,15 @@ type Definition struct {
 	Name        string
 	Scope       []string
 	Selector    Selector
+
+	// `matchcase` (`bool`): Adapt the replacement to the case of the text it
+	// replaces, so a rule written as `A-OK` still suggests `a-ok` for `a ok`.
+	//
+	// Meaningful wherever a rule swaps matched text for a literal the author
+	// wrote, since the author cannot know in advance how it will be cased.
+	// `capitalization` ignores it: that rule is about case, and re-casing its
+	// suggestion to match what it found would undo the correction.
+	MatchCase bool
 }
 
 var defaultStyles = []string{"Vale"}
@@ -194,9 +203,14 @@ func makeAlert(chk Definition, loc []int, txt string, cfg *core.Config) (core.Al
 		return core.Alert{}, err
 	}
 
+	action := chk.Action
+	if chk.MatchCase && action.Name == "replace" {
+		action.Params = recase(action.Params, match)
+	}
+
 	a := core.Alert{
 		Check: chk.Name, Severity: chk.Level, Span: loc, Link: chk.Link,
-		Match: match, Action: chk.Action}
+		Match: match, Action: action}
 
 	if chk.Action.Name != "" {
 		repl := match
