@@ -25,21 +25,30 @@ type affix struct {
 	CrossProduct bool      // -
 }
 
-// expand provides all variations of a given word based on this affix rule
-func (a affix) expand(word string, out []string) []string {
+// form is one generated word and the continuation flags of the rule that
+// produced it, which may be empty.
+type form struct {
+	Word string
+	Cont string
+}
+
+// forms provides all variations of a given word based on this affix rule,
+// each paired with the continuation flags that still apply to it.
+func (a affix) forms(word string) []form {
+	var out []form
 	for _, r := range a.Rules {
 		if r.matcher != nil && !r.matcher.MatchString(word) {
 			continue
 		}
 		if a.Type == Prefix {
-			out = append(out, r.AffixText+word)
+			out = append(out, form{Word: r.AffixText + word, Cont: r.Cont})
 			// TODO is does Strip apply to prefixes too?
 		} else {
 			stripWord := word
 			if r.Strip != "" && strings.HasSuffix(word, r.Strip) {
 				stripWord = word[:len(word)-len(r.Strip)]
 			}
-			out = append(out, stripWord+r.AffixText)
+			out = append(out, form{Word: stripWord + r.AffixText, Cont: r.Cont})
 		}
 	}
 	return out
@@ -48,9 +57,16 @@ func (a affix) expand(word string, out []string) []string {
 // rule is a Affix rule
 type rule struct {
 	Strip     string
-	AffixText string         // suffix or prefix text to add
-	Pattern   string         // original matching pattern from AFF file
-	matcher   *regexp.Regexp // matcher to see if this rule applies or not
+	AffixText string // suffix or prefix text to add
+
+	// Cont holds the continuation flags the rule carries, if any -- the
+	// "34,22" of `SFX 1 0 t/34,22 e`. They name the affix classes that apply
+	// again to the form this rule produces, which is how a dictionary spells
+	// out an inflection built in more than one step.
+	Cont string
+
+	Pattern string         // original matching pattern from AFF file
+	matcher *regexp.Regexp // matcher to see if this rule applies or not
 }
 
 // dictConfig is a partial representation of a Hunspell AFF (Affix) file.
@@ -111,6 +127,11 @@ func (a dictConfig) parseFlags(flagStr string) []string {
 //
 //	This also supports CompoundRule flags
 func (a dictConfig) expand(wordAffix string, out []string) ([]string, error) {
+	return a.expandDepth(wordAffix, out, 0)
+}
+
+// expandDepth is expand, tracking how many continuation classes deep it is.
+func (a dictConfig) expandDepth(wordAffix string, out []string, depth int) ([]string, error) {
 	out = out[:0]
 	idx := strings.Index(wordAffix, "/")
 
@@ -156,7 +177,7 @@ func (a dictConfig) expand(wordAffix string, out []string) ([]string, error) {
 			continue
 		}
 		if !af.CrossProduct {
-			out = af.expand(word, out)
+			out = a.appendForms(af.forms(word), out, depth)
 			continue
 		}
 		if af.Type == Prefix {
@@ -168,20 +189,58 @@ func (a dictConfig) expand(wordAffix string, out []string) ([]string, error) {
 
 	// expand all suffixes with out any prefixes
 	for _, suf := range suffixes {
-		out = suf.expand(word, out)
+		out = a.appendForms(suf.forms(word), out, depth)
 	}
 	for _, pre := range prefixes {
-		prewords := pre.expand(word, nil)
-		out = append(out, prewords...)
+		prewords := pre.forms(word)
+		out = a.appendForms(prewords, out, depth)
 
 		// now do cross product
 		for _, suf := range suffixes {
 			for _, w := range prewords {
-				out = suf.expand(w, out)
+				out = a.appendForms(suf.forms(w.Word), out, depth)
 			}
 		}
 	}
 	return out, nil
+}
+
+// maxAffixDepth bounds how many times a continuation class may be followed.
+//
+// Hunspell's default is twofold affixation -- one continuation -- and this
+// allows one more for dictionaries that lean on longer chains. A bound is what
+// makes this safe at all: nothing stops an .aff file from having a class
+// continue to itself, and following that faithfully would not terminate.
+const maxAffixDepth = 2
+
+// appendForms adds each generated form to out, then follows any continuation
+// flags it carries.
+//
+// This is the step Hunspell calls twofold affixation: `SFX 1 0 t/34,22 e` says
+// that after the rule builds its form, classes 34 and 22 apply to *that*. Not
+// following them leaves the further-inflected words unrecognized, which reads
+// to a user as their own dictionary not knowing an ordinary word -- most
+// visibly in Danish, Dutch and Hungarian, where inflection is built this way.
+func (a dictConfig) appendForms(forms []form, out []string, depth int) []string {
+	for _, f := range forms {
+		out = append(out, f.Word)
+		if f.Cont == "" || depth >= maxAffixDepth {
+			continue
+		}
+		// The continuation is expressed exactly like a dictionary entry, so
+		// it is expanded as one.
+		more, err := a.expandDepth(f.Word+"/"+f.Cont, nil, depth+1)
+		if err != nil {
+			continue
+		}
+		// expandDepth re-emits the word it was given; it is already in out.
+		for _, w := range more {
+			if w != f.Word {
+				out = append(out, w)
+			}
+		}
+	}
+	return out
 }
 
 // allDigits reports whether s is non-empty and contains only ASCII digits. It
@@ -370,23 +429,26 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 				// See #499.
 				//
 				// TODO: Is this safe to do in all cases?
-				affixText := parts[3]
+				affixText, cont := parts[3], ""
 				if affixText == "0" {
 					affixText = ""
 				} else if i := strings.Index(affixText, "/"); i >= 0 {
-					// Strip the affix's own continuation flags, e.g. the
-					// "/34,22" in `SFX 1 0 t/34,22 e`. Otherwise they'd be
-					// appended to the generated word ("stavet/34,22"), so the
-					// real form ("stavet") is never recognized. See #1065.
+					// Split off the affix's own continuation flags, e.g. the
+					// "/34,22" in `SFX 1 0 t/34,22 e`. Left in place they would
+					// be appended to the generated word ("stavet/34,22"), so
+					// the real form ("stavet") is never recognized. See #1065.
 					//
-					// NOTE: We don't yet recursively apply continuation classes,
-					// so some further-inflected forms remain unrecognized.
-					affixText = affixText[:i]
+					// They are kept rather than dropped: the flags name further
+					// classes that apply to the form this rule produces, which
+					// is how Hunspell builds a word like `stavets` from
+					// `stave` in two steps. See expand.
+					affixText, cont = affixText[:i], affixText[i+1:]
 				}
 
 				a.Rules = append(a.Rules, rule{
 					Strip:     strip,
 					AffixText: affixText,
+					Cont:      cont,
 					Pattern:   cond,
 					matcher:   matcher,
 				})

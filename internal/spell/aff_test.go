@@ -3,6 +3,7 @@ package spell
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseFlagsASCII(t *testing.T) {
@@ -217,6 +218,7 @@ coituum
 	}{
 		{"stave", true},   // base word, morphology stripped
 		{"stavet", true},  // SFX 1 with continuation flags stripped
+		{"stavets", true}, // SFX 1, then its continuation into SFX 34
 		{"staves", true},  // SFX 34
 		{"coituum", true}, // word before the malformed line still loaded
 		{"thtis", false},  // a genuine misspelling is still caught
@@ -315,5 +317,50 @@ func TestConditionlessAffixRule(t *testing.T) {
 	}
 	if !gs.spell("kats") {
 		t.Error("expected suffixed 'kats' (conditionless SFX rule) to be recognized")
+	}
+}
+
+// TestContinuationCycleTerminates covers an .aff file whose affix class
+// continues to itself. Nothing in the format forbids it, and following it
+// faithfully would not terminate, so expansion is bounded -- the point of the
+// test is that loading finishes at all and still recognizes the forms the
+// bound does allow.
+func TestContinuationCycleTerminates(t *testing.T) {
+	affContent := `SET UTF-8
+FLAG num
+
+SFX 1 Y 1
+SFX 1 0 s/1 .
+`
+	dicContent := `1
+loop/1
+`
+
+	done := make(chan *goSpell, 1)
+	go func() {
+		gs, err := newGoSpellReader(
+			strings.NewReader(affContent),
+			strings.NewReader(dicContent),
+		)
+		if err != nil {
+			t.Error(err)
+			done <- nil
+			return
+		}
+		done <- gs
+	}()
+
+	select {
+	case gs := <-done:
+		if gs == nil {
+			return
+		}
+		for _, w := range []string{"loop", "loops"} {
+			if !gs.spell(w) {
+				t.Errorf("spell(%q) = false, want true", w)
+			}
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("expansion did not terminate on a self-continuing affix class")
 	}
 }
