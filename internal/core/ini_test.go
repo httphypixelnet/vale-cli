@@ -186,3 +186,36 @@ Transform = %s
 		t.Errorf("expected %v, but got %v", absPath, actual)
 	}
 }
+
+// Test_shadowLoad_sectionsDoNotInherit covers a config split across two
+// sources, which is the ordinary case: a global .vale.ini plus the project's.
+//
+// Sections here are glob patterns, and nearly all of them contain a dot. The
+// ini library reads a dot as section nesting, so a key lookup that missed in
+// `[*.txt]` used to fall back to `[*]` and return its key. Merging the second
+// source then wrote one section's styles into the other, and a style scoped to
+// `.txt` applied to every file. See #1129.
+func Test_shadowLoad_sectionsDoNotInherit(t *testing.T) {
+	global := []byte("MinAlertLevel = suggestion\n")
+	local := []byte("[*]\nBasedOnStyles = A\n\n[*.txt]\nBasedOnStyles = B\n")
+
+	uCfg, err := shadowLoad(global, local)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conf, err := NewConfig(&CLIFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = processConfig(uCfg, conf, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := conf.GBaseStyles; len(got) != 1 || got[0] != "A" {
+		t.Errorf("[*] should hold only its own styles; got %v", got)
+	}
+	if got := conf.SBaseStyles["*.txt"]; len(got) != 1 || got[0] != "B" {
+		t.Errorf("[*.txt] should hold only its own styles; got %v", got)
+	}
+}

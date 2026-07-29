@@ -18,6 +18,19 @@ var pathKeys = []string{
 	"StylesPath",
 }
 
+// noChildSections disables the ini library's child-section feature.
+//
+// That feature reads a `.` in a section's name as nesting, so `[*.md]` is
+// taken to be a child of `[*]` and inherits its keys. Our sections are glob
+// patterns, where a dot is just a dot -- and nearly every one of them contains
+// one. Left enabled, a lookup that misses in `[*.md]` silently returns `[*]`'s
+// key instead, which is how a style scoped to one file type ended up applying
+// to every file. See #1129.
+//
+// The delimiter has to be a string a section name cannot contain, rather than
+// empty: an empty one is replaced by the library's default.
+const noChildSections = "\x00"
+
 var coreError = "'%s' is a core option; it should be defined above any syntax-specific options (`[...]`)."
 
 func mergeValues(shadows []string) []string {
@@ -290,6 +303,7 @@ func shadowLoad(source interface{}, others ...interface{}) (*ini.File, error) {
 		AllowShadows:             true,
 		Loose:                    true,
 		SpaceBeforeInlineComment: true,
+		ChildSectionDelimiter:    noChildSections,
 	}
 
 	primary, err := ini.LoadSources(options, source)
@@ -320,6 +334,7 @@ func processSources(cfg *Config, sources []string) (*ini.File, error) {
 		AllowShadows:             true,
 		Loose:                    true,
 		SpaceBeforeInlineComment: true,
+		ChildSectionDelimiter:    noChildSections,
 	})
 
 	if len(sources) == 0 {
