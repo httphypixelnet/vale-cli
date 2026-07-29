@@ -44,8 +44,34 @@ type File struct {
 	Metrics    map[string]int    // count-based metrics
 	history    map[string]int    // -
 	limits     map[string]int    // -
+	lineIdx    []int             // byte offset of each line start in lineIdxCtx
+	lineIdxCtx string            // the context lineIdx was built from
 	simple     bool              // -
 	Lookup     bool              // -
+}
+
+// lineStarts returns the byte offset at which each line of ctx begins.
+//
+// Locating an alert needs the number of newlines before it. Counting them per
+// alert is a scan of the document each time, and alert count grows with
+// document size, so the index is built once and searched instead.
+func (f *File) lineStarts(ctx string) []int {
+	// Comparing the context is cheap when it is the same string, which is the
+	// common case: Go checks length and data pointer before any bytes.
+	if f.lineIdx != nil && f.lineIdxCtx == ctx {
+		return f.lineIdx
+	}
+
+	starts := make([]int, 1, strings.Count(ctx, "\n")+1)
+	for i := 0; i < len(ctx); i++ {
+		if ctx[i] == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+
+	f.lineIdx, f.lineIdxCtx = starts, ctx
+
+	return starts
 }
 
 // NewFile initializes a File.
@@ -265,16 +291,15 @@ func (f *File) assignLoc(ctx string, blk nlp.Block, pad int, a Alert) (int, []in
 // from absolute byte offsets into the raw document text. This avoids the
 // text-search approach used by FindLoc/initialPosition, which can report the
 // wrong location when the matched text appears more than once.
-func locFromByteOffset(ctx string, begin, end, pad int) (int, []int) {
-	line := 1
-	lineStart := 0
-
-	for i := 0; i < begin && i < len(ctx); i++ {
-		if ctx[i] == '\n' {
-			line++
-			lineStart = i + 1
-		}
+func locFromByteOffset(ctx string, starts []int, begin, end, pad int) (int, []int) {
+	if begin > len(ctx) {
+		begin = len(ctx)
 	}
+
+	// The line is the number of starts at or before begin, which is already
+	// 1-based because every document starts a line at offset 0.
+	line := sort.Search(len(starts), func(i int) bool { return starts[i] > begin })
+	lineStart := starts[line-1]
 
 	col := nlp.StrLen(ctx[lineStart:begin]) + 1 + pad
 	matchLen := nlp.StrLen(ctx[begin:end])
@@ -316,7 +341,8 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 	// have been modified by ChkToCtx substitutions from earlier alerts.
 	switch {
 	case a.HasByteOffsets && a.Span[0] >= 0 && a.Span[1] <= len(blk.Context):
-		a.Line, a.Span = locFromByteOffset(blk.Context, a.Span[0], a.Span[1], pad)
+		a.Line, a.Span = locFromByteOffset(
+			blk.Context, f.lineStarts(blk.Context), a.Span[0], a.Span[1], pad)
 	case strings.HasPrefix(blk.Scope, "raw") && a.Match != "" &&
 		a.Span[0] >= 0 && a.Span[1] <= len(blk.Context) &&
 		blk.Context[a.Span[0]:a.Span[1]] == a.Match:
@@ -327,7 +353,8 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 		// earlier occurrence; this replaces the capped word-masking heuristic
 		// that mislocated `^`-anchored matches once the document exceeded 1k
 		// bytes. See #869.
-		a.Line, a.Span = locFromByteOffset(blk.Context, a.Span[0], a.Span[1], pad)
+		a.Line, a.Span = locFromByteOffset(
+			blk.Context, f.lineStarts(blk.Context), a.Span[0], a.Span[1], pad)
 	default:
 		// For non-raw scopes the block text differs from the source, so the
 		// span isn't a usable byte offset; fall back to a text search. When a

@@ -1,6 +1,10 @@
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/errata-ai/vale/v3/internal/nlp"
+)
 
 // A punctuation-only match in a block whose text was altered by inline markup
 // (e.g. a stripped code span) must still be located within that block, not at
@@ -63,5 +67,78 @@ func TestInitialPositionSmartApostrophe(t *testing.T) {
 				t.Errorf("sub = %q, want %q", sub, "toolkit's")
 			}
 		})
+	}
+}
+
+// locByScan is the previous implementation: count newlines from the start of
+// the document on every call. The indexed version has to agree with it exactly.
+func locByScan(ctx string, begin, end, pad int) (int, []int) {
+	line := 1
+	lineStart := 0
+
+	for i := 0; i < begin && i < len(ctx); i++ {
+		if ctx[i] == '\n' {
+			line++
+			lineStart = i + 1
+		}
+	}
+
+	col := nlp.StrLen(ctx[lineStart:begin]) + 1 + pad
+	matchLen := nlp.StrLen(ctx[begin:end])
+
+	span := []int{col, col + matchLen - 1}
+	if span[1] <= 0 {
+		span[1] = 1
+	}
+
+	return line, span
+}
+
+func TestLocFromByteOffsetMatchesScan(t *testing.T) {
+	inputs := []string{
+		"",
+		"one line",
+		"a\nb\nc",
+		"\n\n\nleading blanks",
+		"trailing\n",
+		"héllo\nwörld\n日本語\n👍🏽 emoji",
+		"win\r\nline\r\nendings",
+	}
+
+	f := &File{}
+	for _, ctx := range inputs {
+		starts := f.lineStarts(ctx)
+		for begin := 0; begin <= len(ctx); begin++ {
+			for end := begin; end <= len(ctx); end++ {
+				for _, pad := range []int{0, 3} {
+					wantLine, wantSpan := locByScan(ctx, begin, end, pad)
+					gotLine, gotSpan := locFromByteOffset(ctx, starts, begin, end, pad)
+
+					if gotLine != wantLine {
+						t.Fatalf("ctx=%q begin=%d: line = %d, want %d",
+							ctx, begin, gotLine, wantLine)
+					}
+					if gotSpan[0] != wantSpan[0] || gotSpan[1] != wantSpan[1] {
+						t.Fatalf("ctx=%q begin=%d end=%d: span = %v, want %v",
+							ctx, begin, end, gotSpan, wantSpan)
+					}
+				}
+			}
+		}
+	}
+}
+
+// The index is cached per context; a different context must rebuild it.
+func TestLineStartsRebuildsOnNewContext(t *testing.T) {
+	f := &File{}
+
+	if got := f.lineStarts("a\nb"); len(got) != 2 {
+		t.Fatalf("lineStarts = %v, want 2 entries", got)
+	}
+	if got := f.lineStarts("a\nb\nc\nd"); len(got) != 4 {
+		t.Fatalf("lineStarts after change = %v, want 4 entries", got)
+	}
+	if got := f.lineStarts("a\nb"); len(got) != 2 {
+		t.Fatalf("lineStarts back = %v, want 2 entries", got)
 	}
 }
