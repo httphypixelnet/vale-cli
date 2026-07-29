@@ -35,7 +35,15 @@ type NLPToken struct {
 	// words".
 	Target bool
 
+	// re finds candidate positions by scanning the whole sentence, so it must
+	// not be anchored.
 	re *rx.Regexp
+
+	// tokenRe tests one token, so it must be. A `pattern` names the word a
+	// position accepts: without anchoring, `self` also accepts the single
+	// token `self-worth`, and a rule for `your self` fires on `your
+	// self-worth`.
+	tokenRe *rx.Regexp
 
 	// wordRe narrows a universal tag to the words it can apply to.
 	//
@@ -123,6 +131,17 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 				return rule, core.NewE201FromPosition(errc.Error(), path, 1)
 			}
 			rule.Tokens[i].re = re
+
+			anchored := fmt.Sprintf(tokenTemplate, token.Pattern)
+			if rule.Ignorecase {
+				anchored = ignoreCase + anchored
+			}
+
+			tre, terr := rx.Compile(anchored)
+			if terr != nil {
+				return rule, core.NewE201FromPosition(terr.Error(), path, 1)
+			}
+			rule.Tokens[i].tokenRe = tre
 		}
 	}
 
@@ -175,7 +194,8 @@ func tokensMatch(token NLPToken, word tag.Token) bool {
 	}
 
 	failedTag = failedTag == token.Negate
-	failedTok := token.re != nil && token.re.MatchStringStd(word.Text) == token.Negate
+	failedTok := token.tokenRe != nil &&
+		token.tokenRe.MatchStringStd(word.Text) == token.Negate
 
 	// A universal tag that Penn cannot express also restricts which words
 	// qualify -- `upos: AUX` is "a verb, and one of these words".
