@@ -18,6 +18,13 @@ type Script struct {
 	Definition `mapstructure:",squash"`
 	Script     string
 
+	// compiled is the parsed program, built once with the rule.
+	//
+	// Compiling is the expensive part of running a script, and the source
+	// never changes; only the text handed to it does. Each block gets a clone,
+	// which copies the globals and leaves the bytecode shared.
+	compiled *tengo.Compiled
+
 	path string
 }
 
@@ -43,6 +50,26 @@ func NewScript(cfg *core.Config, generic baseCheck, path string) (Script, error)
 	}
 
 	rule.path = path
+
+	program := tengo.NewScript([]byte(rule.Script))
+	// NOTE: We don't want to enable the`os` module because of the security
+	// implications?
+	//
+	// See #495, for example.
+	program.SetImports(stdlib.GetModuleMap("text", "fmt", "math"))
+
+	// Declared now so the compiled program has a slot for it; the value is
+	// replaced per block.
+	if err = program.Add("scope", ""); err != nil {
+		return rule, core.NewE201FromTarget(err.Error(), "script", path)
+	}
+
+	compiled, err := program.Compile()
+	if err != nil {
+		return rule, core.NewE201FromTarget(err.Error(), "script", path)
+	}
+	rule.compiled = compiled
+
 	return rule, nil
 }
 
@@ -50,24 +77,15 @@ func NewScript(cfg *core.Config, generic baseCheck, path string) (Script, error)
 func (s Script) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert, error) {
 	var alerts []core.Alert
 
-	script := tengo.NewScript([]byte(s.Script))
-	// NOTE: We don't want to enable the`os` module because of the security
-	// implications?
-	//
-	// See #495, for example.
-	script.SetImports(stdlib.GetModuleMap("text", "fmt", "math"))
+	// A clone per block: the program is shared, its globals are not, and Vale
+	// lints files concurrently.
+	compiled := s.compiled.Clone()
 
-	err := script.Add("scope", blk.Text)
-	if err != nil {
+	if err := compiled.Set("scope", blk.Text); err != nil {
 		return alerts, core.NewE201FromTarget(err.Error(), "script", s.path)
 	}
 
-	compiled, err := script.Compile()
-	if err != nil {
-		return alerts, core.NewE201FromTarget(err.Error(), "script", s.path)
-	}
-
-	if err = compiled.Run(); err != nil {
+	if err := compiled.Run(); err != nil {
 		return alerts, core.NewE201FromTarget(err.Error(), "script", s.path)
 	}
 
