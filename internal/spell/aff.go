@@ -432,7 +432,7 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 				affixText, cont := parts[3], ""
 				if affixText == "0" {
 					affixText = ""
-				} else if i := strings.Index(affixText, "/"); i >= 0 {
+				} else if text, flags, found := strings.Cut(affixText, "/"); found {
 					// Split off the affix's own continuation flags, e.g. the
 					// "/34,22" in `SFX 1 0 t/34,22 e`. Left in place they would
 					// be appended to the generated word ("stavet/34,22"), so
@@ -442,7 +442,7 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 					// classes that apply to the form this rule produces, which
 					// is how Hunspell builds a word like `stavets` from
 					// `stave` in two steps. See expand.
-					affixText, cont = affixText[:i], affixText[i+1:]
+					affixText, cont = text, flags
 				}
 
 				a.Rules = append(a.Rules, rule{
