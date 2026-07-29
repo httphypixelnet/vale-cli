@@ -39,6 +39,11 @@ type NLPToken struct {
 	// not be anchored.
 	re *rx.Regexp
 
+	// tagRe matches the token's part-of-speech tag. Compiled once with the
+	// rule: this is tested against every word of every sentence, and compiling
+	// it per call was the single largest cost in a tag-heavy style.
+	tagRe *rx.Regexp
+
 	// tokenRe tests one token, so it must be. A `pattern` names the word a
 	// position accepts: without anchoring, `self` also accepts the single
 	// token `self-worth`, and a rule for `your self` fires on `your
@@ -117,6 +122,14 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 			rule.needsTagging = true
 		}
 
+		if token.Tag != "" {
+			tre, terr := rx.Compile(token.Tag)
+			if terr != nil {
+				return rule, core.NewE201FromPosition(terr.Error(), path, 1)
+			}
+			rule.Tokens[i].tagRe = tre
+		}
+
 		if token.Pattern != "" {
 			regex := makeRegexp(
 				cfg.WordTemplate,
@@ -187,12 +200,7 @@ func makeTokens(s *Sequence, generic baseCheck) error {
 }
 
 func tokensMatch(token NLPToken, word tag.Token) bool {
-	failedTag, err := rx.MatchString(token.Tag, word.Tag)
-	if err != nil {
-		// FIXME: return the error instead ...
-		panic(err)
-	}
-
+	failedTag := token.tagRe == nil || token.tagRe.MatchStringStd(word.Tag)
 	failedTag = failedTag == token.Negate
 	failedTok := token.tokenRe != nil &&
 		token.tokenRe.MatchStringStd(word.Text) == token.Negate
@@ -419,7 +427,7 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 	var history []int
 
 	// This is *always* sentence-scoped.
-	words := nlp.TextToTokens(blk.Text, &f.NLP)
+	words := f.Tokens(blk.Text)
 
 	// A remote NLP endpoint returns text and tags only, so we have no offsets
 	// to work from and have to fall back to locating the match by its text.

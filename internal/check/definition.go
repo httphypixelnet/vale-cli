@@ -203,6 +203,15 @@ func makeAlert(chk Definition, loc []int, txt string, cfg *core.Config) (core.Al
 		return core.Alert{}, err
 	}
 
+	return alertFor(chk, loc, match, cfg)
+}
+
+// alertFor builds an alert from a span whose text the caller already has.
+//
+// Converting a rune span to text means walking the block from its start, so a
+// caller that has done it once should not pay for it again -- and every
+// caller of makeAlert had already cut the matched text out to inspect it.
+func alertFor(chk Definition, loc []int, match string, cfg *core.Config) (core.Alert, error) {
 	action := chk.Action
 	if chk.MatchCase && action.Name == "replace" {
 		action.Params = recase(action.Params, match)

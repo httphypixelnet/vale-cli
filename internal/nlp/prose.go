@@ -102,3 +102,35 @@ func TextToTokens(text string, nlp *Info) []tag.Token {
 	}
 	return result.Tokens
 }
+
+// TokenCache remembers the tagging of each block within one document.
+//
+// Every `sequence` rule tags the sentence it is given, and a style may hold
+// hundreds of them -- so the same sentence was tagged once per rule. The
+// result depends only on the text, so it is computed once and shared.
+//
+// Scoped to a document: a cache living longer would hold every sentence a run
+// has ever seen, and one shared between documents would need locking on a path
+// that is otherwise free of it.
+type TokenCache struct {
+	tagged map[string][]tag.Token
+}
+
+// Tokens returns the tagged tokens of text, tagging it only the first time.
+func (c *TokenCache) Tokens(text string, info *Info) []tag.Token {
+	if c == nil {
+		return TextToTokens(text, info)
+	}
+
+	if toks, ok := c.tagged[text]; ok {
+		return toks
+	}
+
+	toks := TextToTokens(text, info)
+	if c.tagged == nil {
+		c.tagged = map[string][]tag.Token{}
+	}
+	c.tagged[text] = toks
+
+	return toks
+}

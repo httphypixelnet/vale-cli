@@ -72,15 +72,6 @@ func MustCompile(expr string) *Regexp {
 	return re
 }
 
-// MatchString reports whether s contains a match of pattern.
-func MatchString(pattern, s string) (bool, error) {
-	re, err := Compile(pattern)
-	if err != nil {
-		return false, err
-	}
-	return re.MatchStringStd(s), nil
-}
-
 // MatchStringStd reports whether s contains a match, panicking if the match
 // itself fails.
 func (re *Regexp) MatchStringStd(s string) bool {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jdkato/prose/v3/summarize"
+	"github.com/jdkato/prose/v3/tag"
 
 	"github.com/errata-ai/vale/v3/internal/glob"
 	"github.com/errata-ai/vale/v3/internal/nlp"
@@ -44,6 +45,7 @@ type File struct {
 	Metrics    map[string]int    // count-based metrics
 	history    map[string]int    // -
 	limits     map[string]int    // -
+	tags       *nlp.TokenCache   // tagging shared by every rule that needs it
 	lineIdx    []int             // byte offset of each line start in lineIdxCtx
 	lineIdxCtx string            // the context lineIdx was built from
 	simple     bool              // -
@@ -167,6 +169,15 @@ func NewFile(src string, config *Config) (*File, error) {
 	}
 
 	return &file, nil
+}
+
+// Tokens returns the tagged tokens of text, tagging it only once per document
+// however many rules ask for it.
+func (f *File) Tokens(text string) []tag.Token {
+	if f.tags == nil {
+		f.tags = &nlp.TokenCache{}
+	}
+	return f.tags.Tokens(text, &f.NLP)
 }
 
 // SortedAlerts returns all of f's alerts sorted by line and column.

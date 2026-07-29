@@ -93,7 +93,7 @@ func (e Existence) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core.Al
 
 		observed := strings.TrimSpace(converted)
 		if !isMatch(e.exceptRe, observed) && !withinPhrase(e.phraseRe, blk.Text, loc) {
-			a, erra := makeAlert(e.Definition, loc, blk.Text, cfg)
+			a, erra := alertFor(e.Definition, loc, converted, cfg)
 			if erra != nil {
 				return alerts, erra
 			}

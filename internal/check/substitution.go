@@ -101,6 +101,11 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 	txt := blk.Text
 	// Leave early if we can to avoid calling `FindAllStringSubmatchIndex`
 	// unnecessarily.
+	//
+	// This looks like a wasted scan on a block that does match, and it was
+	// measured as the cheaper arrangement anyway: MatchString stops at the
+	// first hit, and a block with no match skips the allocation the Find below
+	// makes for its submatch slices.
 	if !s.pattern.MatchStringStd(txt) {
 		return alerts, nil
 	}
@@ -167,7 +172,7 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 						expected = recaseToTerm(expected, observed)
 					}
 
-					a, aerr := makeAlert(s.Definition, loc, txt, cfg)
+					a, aerr := alertFor(s.Definition, loc, observed, cfg)
 					if aerr != nil {
 						return alerts, aerr
 					}

@@ -67,8 +67,16 @@ func runeSpanToBytes(s string, from, to int) (int, int, bool) {
 			hi = i
 			break
 		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		i += size
+
+		// Decoding is only needed past ASCII, and prose is mostly ASCII. This
+		// runs for every match and again for every alert, so the call is worth
+		// avoiding in the common case.
+		if s[i] < utf8.RuneSelf {
+			i++
+		} else {
+			_, size := utf8.DecodeRuneInString(s[i:])
+			i += size
+		}
 		runes++
 	}
 
