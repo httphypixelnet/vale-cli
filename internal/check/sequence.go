@@ -504,6 +504,16 @@ func sentenceScope(declared []string) []string {
 			scopes = append(scopes, "~"+neg)
 			continue
 		}
+		// `paragraph` names no block of its own. Splitting wraps every block
+		// as `paragraph.<scope>` -- headings and list items included -- so the
+		// scope already describes the same blocks an undeclared one does.
+		// Narrowing it to `sentence.paragraph` asked for blocks that are never
+		// built, and the rule matched nothing without saying so. See #1126.
+		if rest, found := strings.CutPrefix(s, "paragraph"); found &&
+			(rest == "" || strings.HasPrefix(rest, ".")) {
+			scopes = append(scopes, "sentence"+rest)
+			continue
+		}
 		scopes = append(scopes, "sentence."+s)
 	}
 

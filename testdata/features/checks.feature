@@ -162,6 +162,15 @@ Feature: Checks
             test.md:1:16:demo.Spacing:'.W' should have one space
             """
 
+    Scenario: Sequence scoped to paragraph
+        When I test "checks/SequenceParagraph"
+        Then the output should contain exactly:
+            """
+            test.md:1:31:T.R:Sequence matched 'connection'.
+            test.md:3:29:T.R:Sequence matched 'connection'.
+            test.md:5:32:T.R:Sequence matched 'connection'.
+            """
+
     Scenario: Sequence reaches every block
         When I test "checks/SequenceScopes"
         Then the output should contain exactly:

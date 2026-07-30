@@ -1,0 +1,8 @@
+---
+extends: sequence
+message: "Sequence matched '%s'."
+level: error
+scope: paragraph
+tokens:
+  - pattern: connection
+  - pattern: pool
