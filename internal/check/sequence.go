@@ -193,7 +193,7 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 		}
 	}
 
-	rule.Definition.Scope = []string{"sentence"}
+	rule.Definition.Scope = sentenceScope(rule.Definition.Scope)
 	rule.filter = rule.literals()
 
 	return rule, nil
@@ -476,6 +476,40 @@ func (s Sequence) targetRange(m match) (int, int, bool) {
 }
 
 // Run looks for the user-defined sequence of tokens.
+// sentenceScope narrows the scopes a `sequence` rule was given to the
+// sentences within them.
+//
+// The rule reads part-of-speech data, which is tagged a sentence at a time, so
+// it always runs on sentences -- but *which* sentences is the author's to say.
+// Declaring `list` means the sentences of list items, not the whole document's.
+// An undeclared scope means all of them.
+//
+// A scope that already names sentences is left as it is, so `sentence.list`
+// and `list` describe the same thing.
+func sentenceScope(declared []string) []string {
+	if len(declared) == 0 {
+		return []string{"sentence"}
+	}
+
+	scopes := make([]string, 0, len(declared))
+	for _, s := range declared {
+		if s == "sentence" || strings.HasPrefix(s, "sentence.") {
+			scopes = append(scopes, s)
+			continue
+		}
+		// Negation applies to the part being excluded, so it stays in front:
+		// `~list` narrows to sentences outside a list, not to something
+		// outside `sentence.list`.
+		if neg, found := strings.CutPrefix(s, "~"); found {
+			scopes = append(scopes, "~"+neg)
+			continue
+		}
+		scopes = append(scopes, "sentence."+s)
+	}
+
+	return scopes
+}
+
 func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert, error) {
 	var alerts []core.Alert
 	var offset []string

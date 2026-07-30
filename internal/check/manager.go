@@ -260,7 +260,12 @@ func (mgr *Manager) compileCheck(file []byte, chkName, path string) (Rule, bool,
 		generic["level"] = "warning"
 	}
 	if scope, ok := generic["scope"]; scope == nil || !ok {
-		generic["scope"] = []string{"text"}
+		// Not for `sequence`, which needs to tell an unset scope from an
+		// explicit `text` one: it runs on sentences, and has to know whether
+		// the author asked for somewhere in particular to take them from.
+		if extends, _ := generic["extends"].(string); extends != "sequence" {
+			generic["scope"] = []string{"text"}
+		}
 	}
 
 	rule, err := buildRule(mgr.Config, generic)
