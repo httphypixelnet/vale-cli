@@ -40,6 +40,33 @@ func quoteTolerantPattern(s string) string {
 	return b.String()
 }
 
+// insideInlineMarkup reports whether a match sits against a backtick or a
+// dash, which is how a match inside inline code is recognised.
+//
+// NOTE: This is a workaround for #673. Ideally we'd handle it at the AST level
+// by ignoring inline code spans.
+func insideInlineMarkup(ctx string, fs []int) bool {
+	size := nlp.StrLen(ctx)
+
+	start := fs[0] - 1
+	end := fs[1] + 1
+	if start > 0 && (ctx[start] == '`' || ctx[start] == '-') {
+		return true
+	} else if end < size && (ctx[end] == '`' || ctx[end] == '-') {
+		return true
+	}
+
+	return false
+}
+
+// positionOf converts a match offset into the 1-based rune position reported.
+func positionOf(ctx string, idx int, sub string) (int, string) {
+	if strings.HasPrefix(ctx[idx:], "_") {
+		idx++ // We don't want to include the underscore boundary.
+	}
+	return nlp.StrLen(ctx[:idx]) + 1, sub
+}
+
 // initialPosition calculates the position of a match (given by the location in
 // the reference document, `loc`) in the source document (`ctx`).
 func initialPosition(ctx, txt string, a Alert) (int, string) {
@@ -71,7 +98,18 @@ func initialPosition(ctx, txt string, a Alert) (int, string) {
 	sub := strings.ToValidUTF8(a.Match, "")
 	pat = regexp.MustCompile(`(?:^|\b|_)` + quoteTolerantPattern(sub) + `(?:_|\b|$)`)
 
-	fsi := pat.FindAllStringIndex(ctx, -1)
+	// Only the first acceptable match is used, so the search stops at the
+	// first one and widens only if that turns out to be rejected below. This
+	// runs once per alert over the whole context, so scanning past a match
+	// nothing reads is the difference between linear and quadratic on a
+	// document with many alerts -- which spelling produces by the thousand.
+	fsi := pat.FindAllStringIndex(ctx, 1)
+	if len(fsi) > 0 && !insideInlineMarkup(ctx, fsi[0]) {
+		return positionOf(ctx, fsi[0][0], sub)
+	}
+	if len(fsi) > 0 {
+		fsi = pat.FindAllStringIndex(ctx, -1)
+	}
 	if len(fsi) == 0 {
 		idx = strings.Index(ctx, sub)
 		if idx < 0 {

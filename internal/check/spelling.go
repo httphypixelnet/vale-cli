@@ -25,8 +25,12 @@ var defaultFilters = []*regexp.Regexp{
 
 // Spelling checks text against a Hunspell dictionary.
 type Spelling struct {
-	Definition   `mapstructure:",squash"`
-	Filters      []*regexp.Regexp
+	Definition `mapstructure:",squash"`
+	Filters    []*regexp.Regexp
+
+	// stdFilters applies the built-in filters, which are hand-written rather
+	// than compiled. Set unless the rule declares `custom: true`.
+	stdFilters   bool
 	Ignore       []string
 	Exceptions   []string
 	Dictionaries []string
@@ -162,7 +166,10 @@ func NewSpelling(cfg *core.Config, generic baseCheck, path string) (Spelling, er
 	}
 
 	if !rule.Custom {
-		rule.Filters = append(rule.Filters, defaultFilters...)
+		// The defaults are answered by hand rather than by regex -- see
+		// spellfilter.go. They are not appended to Filters, so a rule that also
+		// declares its own filters runs those as regexes and these as code.
+		rule.stdFilters = true
 	}
 	rule.gs = model
 
@@ -196,6 +203,9 @@ func (s Spelling) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert
 
 OUTER:
 	for _, word := range nlp.WordTokenizer.Tokenize(checkTxt) {
+		if s.stdFilters && skippedByDefault(word) {
+			continue
+		}
 		for _, filter := range s.Filters {
 			if filter.MatchString(word) {
 				continue OUTER
