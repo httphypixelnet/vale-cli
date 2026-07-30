@@ -1,7 +1,10 @@
 package core
 
 import (
+	"regexp"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
@@ -14,7 +17,7 @@ func TestInitialPositionPunctAnchor(t *testing.T) {
 	ctx := "Test, line.\nLine, with, four, commas, `yes`.\n"
 	txt := "Line, with, four, commas, yes."
 
-	pos, sub := initialPosition(ctx, txt, Alert{Match: ","})
+	pos, sub := initialPosition(ctx, txt, Alert{Match: ","}, -1)
 	// The comma belongs to the second sentence (after "Line"), not the first
 	// comma in "Test,". Position is 1-based rune count.
 	if pos != 17 {
@@ -59,7 +62,7 @@ func TestInitialPositionSmartApostrophe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pos, sub := initialPosition(tt.ctx, tt.ctx, Alert{Match: "toolkit's"})
+			pos, sub := initialPosition(tt.ctx, tt.ctx, Alert{Match: "toolkit's"}, -1)
 			if pos != 5 {
 				t.Errorf("pos = %d, want 5", pos)
 			}
@@ -68,6 +71,67 @@ func TestInitialPositionSmartApostrophe(t *testing.T) {
 			}
 		})
 	}
+}
+
+// searchPosition is the position the pattern search reports -- what
+// directPosition has to agree with whenever it accepts an offset.
+func searchPosition(ctx, sub string) (int, bool) {
+	pat := regexp.MustCompile(
+		`(?:^|\b|_)` + quoteTolerantPattern(sub) + `(?:_|\b|$)`)
+
+	fs := pat.FindStringIndex(ctx)
+	if fs == nil {
+		return 0, false
+	}
+
+	idx := fs[0]
+	if strings.HasPrefix(ctx[idx:], "_") {
+		idx++
+	}
+
+	return idx, true
+}
+
+// directPosition trades a search for arithmetic, so its whole value rests on
+// never accepting an offset the search would have disagreed with. Two ways to
+// get that wrong are easy to reach and hard to see: quote tolerance runs one
+// way only (an ASCII apostrophe in the match may stand for a smart one in the
+// source, never the reverse), and the pattern's `_` alternatives *consume* the
+// underscore rather than looking past it, so it lands inside the match and
+// cannot begin the next one.
+func FuzzDirectPosition(f *testing.F) {
+	f.Add("the quick brown fox", "brown", 4)
+	f.Add("a_word_here", "word", 2)
+	f.Add("_leading", "leading", 1)
+	f.Add("the toolkit’s plugin", "toolkit's", 4)
+	f.Add("the toolkit's plugin", "toolkit’s", 4)
+	f.Add("word word word", "word", 10)
+	f.Add("@@@@@ word", "word", 6)
+	f.Add("`code` word", "word", 7)
+	f.Add("'_0ZaAZ _", "0ZaAZ", 2)
+
+	f.Fuzz(func(t *testing.T, ctx, match string, idx int) {
+		sub := strings.ToValidUTF8(match, "")
+		if !utf8.ValidString(ctx) || sub == "" {
+			t.Skip()
+		}
+
+		// from=0 asks the strongest question: is this the first match in the
+		// whole context, which is exactly what the search returns.
+		if !directPosition(ctx, idx, 0, sub) {
+			t.Skip()
+		}
+
+		want, found := searchPosition(ctx, sub)
+		if !found {
+			t.Fatalf("accepted %d in %q for %q, but the search finds nothing",
+				idx, ctx, sub)
+		}
+		if want != idx {
+			t.Fatalf("accepted %d in %q for %q, but the search reports %d",
+				idx, ctx, sub, want)
+		}
+	})
 }
 
 // locByScan is the previous implementation: count newlines from the start of

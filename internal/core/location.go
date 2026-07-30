@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
@@ -59,6 +60,70 @@ func insideInlineMarkup(ctx string, fs []int) bool {
 	return false
 }
 
+// joinsWord reports whether r would sit inside a word, and so cannot stand
+// beside a match that the pattern below requires to be `\b`-bounded.
+//
+// `_` is a word character to the regex engine, but the pattern admits it as a
+// boundary of its own, so it is not one of these.
+func joinsWord(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// directPosition confirms that `idx` is where the search below would land, so
+// that the search itself can be skipped.
+//
+// A check knows where in its block the match was, and the block knows where it
+// begins in `ctx`, so the position is arithmetic. That matters because the
+// search runs once per alert over the whole context, and spelling reports
+// alerts by the thousand -- the difference between linear and quadratic on a
+// large document.
+//
+// The arithmetic rests on hints rather than promises, though: a check may
+// measure against text it transformed first (spelling normalizes quotes before
+// tokenizing), and `ctx` may have been masked by earlier alerts. So the answer
+// is only used when the bytes there really are the match, bounded as the
+// pattern requires, with nothing before it the pattern would have matched
+// first. `from` is where that last check has to start -- everything earlier is
+// already known to hold no match. Anything short of all three falls through to
+// the search, which makes a bad hint cost time instead of correctness.
+func directPosition(ctx string, idx, from int, sub string) bool {
+	// Quote tolerance and the `^`/`$`/`_` alternatives make the pattern's
+	// boundaries subtle in both directions. Restricting this to matches that
+	// begin and end on a letter or digit and hold no quotes covers the ordinary
+	// word -- what spelling reports -- and leaves the rest to the search.
+	if sub == "" || from < 0 || idx < from || strings.ContainsAny(sub, `'"`) {
+		return false
+	}
+	if first, _ := utf8.DecodeRuneInString(sub); !joinsWord(first) {
+		return false
+	}
+	if last, _ := utf8.DecodeLastRuneInString(sub); !joinsWord(last) {
+		return false
+	}
+
+	end := idx + len(sub)
+	if end > len(ctx) || ctx[idx:end] != sub {
+		return false
+	}
+
+	if idx > 0 {
+		if r, _ := utf8.DecodeLastRuneInString(ctx[:idx]); joinsWord(r) {
+			return false
+		}
+	}
+	if end < len(ctx) {
+		if r, _ := utf8.DecodeRuneInString(ctx[end:]); joinsWord(r) {
+			return false
+		}
+	}
+
+	// The search reports the *first* acceptable match, so this agrees with it
+	// only if there is nothing earlier to find. A plain scan is enough: `sub`
+	// holds no quote for the pattern to be tolerant about, so the pattern can
+	// only match where `sub` itself occurs.
+	return !strings.Contains(ctx[from:idx], sub)
+}
+
 // positionOf converts a match offset into the 1-based rune position reported.
 func positionOf(ctx string, idx int, sub string) (int, string) {
 	if strings.HasPrefix(ctx[idx:], "_") {
@@ -69,7 +134,10 @@ func positionOf(ctx string, idx int, sub string) (int, string) {
 
 // initialPosition calculates the position of a match (given by the location in
 // the reference document, `loc`) in the source document (`ctx`).
-func initialPosition(ctx, txt string, a Alert) (int, string) {
+//
+// `at` is where `txt` begins in `ctx` if the caller knows, and -1 otherwise. It
+// is only a shortcut: the position it produces is checked before being used.
+func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 	var idx int
 	var pat *regexp.Regexp
 
@@ -92,10 +160,47 @@ func initialPosition(ctx, txt string, a Alert) (int, string) {
 		}
 	}
 	if offset >= 0 {
-		ctx, _ = Substitute(ctx, ctx[:offset], '@')
+		masked, _ := Substitute(ctx, ctx[:offset], '@')
+		// Substitute maps rune to rune, so a prefix holding anything multi-byte
+		// comes back shorter. The tail it leaves alone is what gives the block
+		// its new position.
+		offset = len(masked) - (len(ctx) - offset)
+		ctx = masked
 	}
 
 	sub := strings.ToValidUTF8(a.Match, "")
+
+	// Where the block starts in `ctx`, and how far the pattern is already known
+	// to have nothing to match. The search above answers both at once. When it
+	// came up empty -- which is what happens once an earlier alert has masked
+	// part of this block, so on every alert but the first -- the caller's offset
+	// still says where the block is, but nothing has ruled out the text in front
+	// of it, so that has to be scanned as well.
+	base, from := offset, offset
+	if base < 0 {
+		base, from = at, 0
+	}
+
+	if !(base >= 0 && len(a.Span) > 0 && a.Span[0] >= 0) {
+	}
+	if base >= 0 && len(a.Span) > 0 && a.Span[0] >= 0 {
+		if idx := base + a.Span[0]; directPosition(ctx, idx, from, sub) {
+			// The span the pattern would have reported, so that the inline-code
+			// test below sees what it sees: both `_` alternatives are consumed
+			// by the match rather than left beside it.
+			fs := []int{idx, idx + len(sub)}
+			if idx > 0 && ctx[idx-1] == '_' {
+				fs[0]--
+			}
+			if fs[1] < len(ctx) && ctx[fs[1]] == '_' {
+				fs[1]++
+			}
+			if !insideInlineMarkup(ctx, fs) {
+				return positionOf(ctx, idx, sub)
+			}
+		}
+	}
+
 	pat = regexp.MustCompile(`(?:^|\b|_)` + quoteTolerantPattern(sub) + `(?:_|\b|$)`)
 
 	// Only the first acceptable match is used, so the search stops at the

@@ -180,20 +180,16 @@ func NewSpelling(cfg *core.Config, generic baseCheck, path string) (Spelling, er
 func (s Spelling) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert, error) {
 	var alerts []core.Alert
 
-	txt := blk.Text
-	// This ensures that we respect `.aff` entries like `ICONV ’ '`,
-	// allowing us to avoid false positives.
-	//
-	// See https://github.com/errata-ai/vale/v2/issues/148.
-	txt = s.gs.Convert(txt)
-
 	// Mask any accepted multi-word phrases (e.g. `mea culpa`) so their
 	// component words aren't spell-checked individually, while the same words
 	// elsewhere still are. We replace each match with an equal-length run of
 	// spaces, which preserves the byte offsets of every other word. See #1035.
-	checkTxt := txt
+	//
+	// This masks the block's own text rather than a converted copy, so that
+	// every offset below is one into `blk.Text` and needs no translation.
+	checkTxt := blk.Text
 	if s.phraseRe != nil {
-		masked, err := s.phraseRe.ReplaceFunc(txt, func(m rx.Match) string {
+		masked, err := s.phraseRe.ReplaceFunc(blk.Text, func(m rx.Match) string {
 			return strings.Repeat(" ", len(m.String()))
 		}, -1, -1)
 		if err == nil {
@@ -201,8 +197,25 @@ func (s Spelling) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert
 		}
 	}
 
+	// Each word's position comes back with it, which is what lets the alert be
+	// placed by arithmetic instead of by searching the whole context for its
+	// text once per alert. Searching also could not tell one occurrence of a
+	// repeated word from another, and so reported the first one every time.
+	words, offsets := nlp.WordTokenizer.TokenizeWithOffsets(checkTxt)
+
 OUTER:
-	for _, word := range nlp.WordTokenizer.Tokenize(checkTxt) {
+	for i, found := range words {
+		// This ensures that we respect `.aff` entries like `ICONV ’ '`,
+		// allowing us to avoid false positives.
+		//
+		// It is applied per word, which is where hunspell applies it, and what
+		// keeps the offsets above measured against the text as written: the
+		// conversions change length, so a position taken from a converted copy
+		// of the block drifts further out of place with every one that fires.
+		//
+		// See https://github.com/errata-ai/vale/v2/issues/148.
+		word := s.gs.Convert(found)
+
 		if s.stdFilters && skippedByDefault(word) {
 			continue
 		}
@@ -213,8 +226,11 @@ OUTER:
 		}
 
 		if !s.gs.Spell(word) && !isMatch(s.exceptRe, word) {
-			offset := strings.Index(checkTxt, word)
-			loc := []int{offset, offset + len(word)}
+			// The extent is the word as it appears, not as it converts: the
+			// offset is a position in the block's own text, so the length that
+			// goes with it has to be measured there too.
+			offset := offsets[i]
+			loc := []int{offset, offset + len(found)}
 
 			a := core.Alert{Check: s.Name, Severity: s.Level, Span: loc,
 				Link: s.Link, Match: word, Action: s.Action}

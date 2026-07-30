@@ -232,7 +232,10 @@ func (f *File) ComputeMetrics() (map[string]interface{}, error) {
 }
 
 // FindLoc calculates the line and span of an Alert.
-func (f *File) FindLoc(ctx, s string, pad, count int, a Alert) (int, []int) {
+//
+// `at` is where `s` begins in `ctx`, or -1 when that is not known; it lets the
+// match be placed without searching for it.
+func (f *File) FindLoc(ctx, s string, pad, count int, a Alert, at int) (int, []int) {
 	var length int
 	var lines []string
 
@@ -240,7 +243,7 @@ func (f *File) FindLoc(ctx, s string, pad, count int, a Alert) (int, []int) {
 		ctx, _ = Substitute(ctx, s, '@')
 	}
 
-	pos, substring := initialPosition(ctx, s, a)
+	pos, substring := initialPosition(ctx, s, a, at)
 	if pos < 0 {
 		// Shouldn't happen ...
 		return pos, []int{0, 0}
@@ -296,7 +299,9 @@ func (f *File) assignLoc(ctx string, blk nlp.Block, pad int, a Alert) (int, []in
 			for _, s := range a.Offset {
 				masked, _ = Substitute(masked, s, '@')
 			}
-			pos, substring := initialPosition(masked, blk.Text, a)
+			// No offset hint: `masked` is a single line, so the block's own
+			// offset is measured against something else entirely.
+			pos, substring := initialPosition(masked, blk.Text, a, -1)
 
 			loc[0] = pos + pad
 			loc[1] = pos + nlp.StrLen(substring) - 1
@@ -396,7 +401,7 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 			a.Line, a.Span = f.assignLoc(ctx, blk, pad, a)
 		}
 		if (!lookup && a.Span[0] < 0) || lookup {
-			a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a)
+			a.Line, a.Span = f.FindLoc(ctx, blk.Text, pad, lines, a, blk.Offset)
 		}
 	}
 
