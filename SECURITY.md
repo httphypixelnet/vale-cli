@@ -1,21 +1,52 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Security fixes go into the latest release. There are no long-term support
+branches: if you are on an older version, upgrading is the fix.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| 3.16.x  | :white_check_mark: |
+| < 3.16  | :x:                |
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Report privately through GitHub, using
+[Report a vulnerability](https://github.com/vale-cli/vale/security/advisories/new)
+on the Security tab. That opens an advisory visible only to you and the
+maintainers.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Please do not open a public issue for something you believe is exploitable.
+
+Include what you have: the version (`vale --version`), the platform, and a
+configuration and input file that reproduce it. A minimal reproduction is worth
+more than a description.
+
+You can expect an acknowledgement within a week. If a report is accepted, the
+fix ships in the next release and the advisory is published with credit unless
+you would rather not be named. If it is declined, you will get the reasoning,
+and you are free to disclose it publicly at that point.
+
+## What is in scope
+
+Vale reads configuration, styles, and documents that a project supplies, and
+`vale sync` downloads packages that configuration names. Anything letting those
+inputs escape their intended effect is in scope, including:
+
+- reading or writing files outside the directories Vale was given, whether
+  through a path in a package, a configuration value, or a document
+- executing code from any of them
+- a crash or unbounded allocation reachable from an ordinary document,
+  dictionary, or style
+
+## What is not
+
+- A rule reporting the wrong thing, or missing something, is a bug rather than
+  a vulnerability. Open an issue.
+- Packages are code you choose to install. `vale sync` fetches what your
+  configuration names, and a package you do not trust can change what Vale
+  reports. Treat `Packages` entries as you would any other dependency.
+- Slowness on deliberately pathological input given to a linter you run over
+  your own files. A pattern that takes a long time on a crafted document is a
+  performance problem; report it as one.
