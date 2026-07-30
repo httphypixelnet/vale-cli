@@ -108,7 +108,7 @@ func (s Substitution) Run(blk nlp.Block, _ *core.File, cfg *core.Config) ([]core
 	// measured as the cheaper arrangement anyway: MatchString stops at the
 	// first hit, and a block with no match skips the allocation the Find below
 	// makes for its submatch slices.
-	if !s.pattern.MatchStringStd(txt) {
+	if !s.pattern.MightMatch(blk.Lower) || !s.pattern.MatchStringStd(txt) {
 		return alerts, nil
 	}
 

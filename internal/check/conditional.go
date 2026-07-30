@@ -83,6 +83,17 @@ func (c Conditional) Run(blk nlp.Block, f *core.File, cfg *core.Config) ([]core.
 
 	txt := blk.Text
 
+	// Every alert this rule raises, on either branch below, comes from a match
+	// of the antecedent -- so if that cannot match, there is nothing to flag.
+	//
+	// It has to be the antecedent and not the consequent: the rule fires when
+	// the consequent is *absent*, so ruling the block out on the consequent
+	// would suppress exactly the alerts it exists to raise. Same reason
+	// `occurrence` is left unfiltered, where a `min` alerts on a count of zero.
+	if !c.patterns[1].MightMatch(blk.Lower) {
+		return alerts, nil
+	}
+
 	// When `Second` has no capture group, the rule is a plain presence check:
 	// if `First` appears, `Second` must appear somewhere in the same block. If
 	// it does, there's nothing to flag; otherwise every `First` match is a

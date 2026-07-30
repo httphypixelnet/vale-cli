@@ -21,6 +21,8 @@
 package regex
 
 import (
+	"strings"
+
 	"github.com/dlclark/regexp2/v2"
 )
 
@@ -34,6 +36,10 @@ type Match = regexp2.Match
 // directly.
 type Regexp struct {
 	*regexp2.Regexp
+
+	// filter holds literals a subject must contain one of. Empty means the
+	// pattern has to be run to find out. See prefilter.go.
+	filter []string
 }
 
 // String returns the source text of the pattern.
@@ -59,7 +65,24 @@ func Compile(expr string) (*Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Regexp{Regexp: re}, nil
+	return &Regexp{Regexp: re, filter: Required(expr)}, nil
+}
+
+// MightMatch reports whether lowered could contain a match.
+//
+// lowered is the subject lower-cased, which the caller does once per block
+// rather than once per rule. A false return is definitive: the pattern cannot
+// match. A true return means the pattern still has to be run.
+func (re *Regexp) MightMatch(lowered string) bool {
+	if re == nil || len(re.filter) == 0 {
+		return true
+	}
+	for _, lit := range re.filter {
+		if strings.Contains(lowered, lit) {
+			return true
+		}
+	}
+	return false
 }
 
 // MustCompile is Compile but panics on an invalid pattern. It is meant for

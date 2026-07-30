@@ -80,6 +80,15 @@ type Sequence struct {
 
 	Ignorecase   bool
 	needsTagging bool
+
+	// filter holds literals the sentence must contain one of. Every token in
+	// the sequence has to match, so any one token's requirement is the whole
+	// rule's. Tokens that only name a tag contribute nothing, and a rule made
+	// entirely of those gets no filter and runs as before.
+	//
+	// This matters more here than elsewhere: Run tags the block before it does
+	// anything else, so ruling the rule out first skips the tagger too.
+	filter []string
 }
 
 // NewSequence creates a new rule from the provided `baseCheck`.
@@ -185,7 +194,27 @@ func NewSequence(cfg *core.Config, generic baseCheck, path string) (Sequence, er
 	}
 
 	rule.Definition.Scope = []string{"sentence"}
+	rule.filter = rule.literals()
+
 	return rule, nil
+}
+
+// literals derives the strongest requirement any single token provides.
+func (s *Sequence) literals() []string {
+	var best []string
+	for i := range s.Tokens {
+		pat := s.Tokens[i].Pattern
+		if pat == "" || s.Tokens[i].Negate || s.Tokens[i].Skip > 0 {
+			// A negated token requires the *absence* of something, and a
+			// skipped one is optional. Neither guarantees any text.
+			continue
+		}
+		got := rx.Required(pat)
+		if len(got) > 0 && rx.Weight(got) > rx.Weight(best) {
+			best = got
+		}
+	}
+	return best
 }
 
 // Fields provides access to the rule definition.
@@ -452,6 +481,11 @@ func (s Sequence) Run(blk nlp.Block, f *core.File, _ *core.Config) ([]core.Alert
 	var offset []string
 	var history []int
 
+	// Rule the sequence out before tagging, which is the expensive part.
+	if len(s.filter) > 0 && !containsAny(blk.Lower, s.filter) {
+		return nil, nil
+	}
+
 	// This is *always* sentence-scoped.
 	words, terr := f.TokensWith(s.Model, blk.Text)
 	if terr != nil {
@@ -552,4 +586,14 @@ func (s Sequence) candidates(txt string, tok NLPToken, words int) [][]int {
 		return tok.re.FindAllStringIndex(txt, -1)
 	}
 	return make([][]int, words)
+}
+
+// containsAny reports whether lowered holds any of the literals.
+func containsAny(lowered string, lits []string) bool {
+	for _, l := range lits {
+		if strings.Contains(lowered, l) {
+			return true
+		}
+	}
+	return false
 }

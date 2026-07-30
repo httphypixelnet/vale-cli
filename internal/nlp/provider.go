@@ -18,6 +18,11 @@ type Block struct {
 	Parent  string // parent (fully-qualfied) selector
 	Text    string // text content
 
+	// Lower is Text lower-cased, for the literal prefilter that decides
+	// whether a rule's pattern can match at all. Computed once per block
+	// because every rule would otherwise repeat it.
+	Lower string
+
 	// Offset is where Text begins within Context, or -1 when that is not
 	// known.
 	//
@@ -47,6 +52,7 @@ func NewLinedBlock(ctx, txt, sel string, line int) Block {
 	return Block{
 		Context: ctx,
 		Text:    txt,
+		Lower:   strings.ToLower(txt),
 		Scope:   sel,
 		Parent:  sel,
 		Line:    line,
