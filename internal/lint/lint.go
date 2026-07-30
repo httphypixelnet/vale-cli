@@ -5,7 +5,9 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/remeh/sizedwaitgroup"
 
@@ -24,6 +26,21 @@ type Linter struct {
 	HasDir    bool
 	nonGlobal bool
 	metaScope string
+
+	// inScope lists the rules whose scope matches a given block scope, keyed by
+	// the block's scope and parent.
+	//
+	// Whether a rule's scope matches depends on nothing else, and a document
+	// has a handful of distinct block scopes against several hundred rules --
+	// so the answer was being recomputed for every rule on every block, which
+	// was the largest part of deciding what to run.
+	inScope *sync.Map
+}
+
+// scopedRule is a rule together with the name it was registered under.
+type scopedRule struct {
+	name string
+	rule check.Rule
 }
 
 type lintResult struct {
@@ -40,6 +57,7 @@ func NewLinter(cfg *core.Config) (*Linter, error) {
 
 	return &Linter{
 		Manager: mgr,
+		inScope: &sync.Map{},
 
 		client:    http.DefaultClient,
 		nonGlobal: globalStyles+globalChecks == 0}, err
@@ -286,8 +304,9 @@ func (l *Linter) lintLines(f *core.File) error {
 // twice; pass nil when there is nothing to deduplicate against.
 func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool, done map[string]bool) error {
 	f.ChkToCtx = make(map[string]string)
-	for name, chk := range l.Manager.Rules() {
-		if !l.shouldRun(name, f, chk, blk) {
+	for _, r := range l.inScopeFor(blk) {
+		name, chk := r.name, r.rule
+		if !l.shouldRun(name, f, chk) {
 			continue
 		}
 
@@ -327,7 +346,39 @@ func lookup(settings map[string]bool, rule, style string) (bool, bool) {
 	return val, ok
 }
 
-func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule, blk nlp.Block) bool {
+// inScopeFor returns the rules that could run on blk, by scope alone.
+//
+// Built once per distinct block scope and reused. Everything else shouldRun
+// weighs -- in-text comments, the file's own settings, the minimum level --
+// varies per file and is still decided there.
+func (l *Linter) inScopeFor(blk nlp.Block) []scopedRule {
+	key := blk.Scope + "\x00" + blk.Parent
+	if l.inScope != nil {
+		if hit, ok := l.inScope.Load(key); ok {
+			return hit.([]scopedRule) //nolint:errcheck // only []scopedRule is stored
+		}
+	}
+
+	rules := l.Manager.Rules()
+	found := make([]scopedRule, 0, len(rules))
+	for name, chk := range rules {
+		if check.NewScope(chk.Fields().Scope).Matches(blk) {
+			found = append(found, scopedRule{name: name, rule: chk})
+		}
+	}
+
+	// A stable order, so that two blocks of the same scope are linted in the
+	// same sequence rather than in whatever order the map produced.
+	sort.Slice(found, func(i, j int) bool { return found[i].name < found[j].name })
+
+	if l.inScope != nil {
+		l.inScope.Store(key, found)
+	}
+
+	return found
+}
+
+func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule) bool {
 	minLevel := l.Manager.Config.MinAlertLevel
 	run := false
 
@@ -340,13 +391,10 @@ func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule, blk nlp.Bl
 		name = strings.Join([]string{list[0], list[1]}, ".")
 	}
 
-	chkScope := check.NewScope(details.Scope)
-	if f.QueryComments(name) { //nolint:gocritic
+	if f.QueryComments(name) {
 		// It has been disabled via an in-text comment.
 		return false
 	} else if core.LevelToInt[details.Level] < minLevel {
-		return false
-	} else if !chkScope.Matches(blk) {
 		return false
 	}
 
