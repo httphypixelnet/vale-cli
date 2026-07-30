@@ -188,11 +188,17 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 					txt = txt[1:]
 				}
 				// Record where this run came from before it loses its identity
-				// in the block. Only a run that survived extraction unchanged
-				// can be mapped; `clean` may have prefixed a space, which
-				// belongs to the block and not to the source.
-				if body := strings.TrimLeft(txt, " "); body == raw {
-					walker.mapRun(buf.Len()+(len(txt)-len(body)), raw)
+				// in the block -- but only when something is going to ask. The
+				// mapping exists to place inline fragments, so a style that
+				// scopes none of them should not pay for it.
+				//
+				// Only a run that survived extraction unchanged can be mapped;
+				// `clean` may have prefixed a space, which belongs to the block
+				// and not to the source.
+				if len(wanted) > 0 {
+					if body := strings.TrimLeft(txt, " "); body == raw {
+						walker.mapRun(buf.Len()+(len(txt)-len(body)), raw)
+					}
 				}
 				buf.WriteString(txt)
 				// Feed the same text to any inline element still open, so a
