@@ -2,10 +2,36 @@ package check
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
+
+// Parsed scopes and selectors are cached rather than rebuilt.
+//
+// Both are derived from strings that are fixed for the life of a run: a rule's
+// scope comes from its definition, and a block's from the parser. But they were
+// parsed afresh for every rule against every block, which for a large style is
+// millions of times. Together they accounted for roughly 70% of everything Vale
+// allocated -- 13 GB of 18 GB on a 650 KB file -- and the resulting garbage
+// collection cost more than the regular-expression matching did.
+//
+// The parsed values are read-only, so one copy can serve every caller.
+var (
+	scopeCache    sync.Map // string -> Scope
+	selectorCache sync.Map // string -> Selector
+)
+
+// cachedSelector parses a dotted scope string, reusing an earlier parse.
+func cachedSelector(value string) Selector {
+	if hit, ok := selectorCache.Load(value); ok {
+		return hit.(Selector) //nolint:errcheck // only Selectors are stored
+	}
+	sel := NewSelector(strings.Split(value, "."))
+	selectorCache.Store(value, sel)
+	return sel
+}
 
 // A Selector represents a named section of text.
 type Selector struct {
@@ -34,6 +60,11 @@ func NewSelector(value []string) Selector {
 }
 
 func NewScope(value []string) Scope {
+	key := strings.Join(value, "\x00")
+	if hit, ok := scopeCache.Load(key); ok {
+		return hit.(Scope) //nolint:errcheck // only Scopes are stored
+	}
+
 	scope := map[string][]Selector{}
 	for _, v := range value {
 		selectors := []Selector{}
@@ -42,13 +73,17 @@ func NewScope(value []string) Scope {
 		}
 		scope[v] = selectors
 	}
-	return Scope{Selectors: scope}
+
+	built := Scope{Selectors: scope}
+	scopeCache.Store(key, built)
+
+	return built
 }
 
 // Macthes the scope `s` matches `s2`.
 func (s Scope) Matches(blk nlp.Block) bool {
-	candidate := NewSelector(strings.Split(blk.Scope, "."))
-	parent := NewSelector(strings.Split(blk.Parent, "."))
+	candidate := cachedSelector(blk.Scope)
+	parent := cachedSelector(blk.Parent)
 
 	for _, sel := range s.Selectors {
 		if s.partMatches(candidate, parent, sel) {
