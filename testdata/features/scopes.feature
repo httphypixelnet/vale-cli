@@ -35,6 +35,7 @@ Feature: Scopes
         When I test scope "sentence"
         Then the output should contain exactly:
             """
+            test.md:1:3:rules.Sentence:'Test'
             test.md:3:1:rules.Sentence:'The controller requires a current of 2 A max.'
             test.md:4:1:rules.Sentence:'The device’s current support for bluetooth is being deprecated.'
             """

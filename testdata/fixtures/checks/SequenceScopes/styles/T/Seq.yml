@@ -1,0 +1,12 @@
+---
+# A `sequence` rule reads part-of-speech data, which no other extension point
+# can. It has to reach the list items, headings and table cells where much of a
+# document's prose lives -- not paragraphs alone. See #1124.
+extends: sequence
+message: "Sequence matched '%s'."
+level: error
+tokens:
+  - upos: NOUN|ADJ
+  - upos: NOUN|ADJ
+  - upos: NOUN|ADJ
+  - upos: NOUN|ADJ

@@ -184,7 +184,23 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 
 			txt = strings.TrimLeft(txt, " ")
 			b := state.block(txt, scope+l.metaScope+f.RealExt)
-			return l.lintBlock(f, b, state.lines, 0, false)
+
+			// Prose, not just a block: a list item or a heading is made of
+			// sentences the same way a paragraph is, and only this path segments
+			// them. Sending these straight to lintBlock left `sentence.*` blocks
+			// existing for paragraphs alone, so any rule scoped to a sentence --
+			// which is every `sequence` rule, and so every rule that can reach
+			// part-of-speech data -- silently skipped the list items, headings
+			// and table cells where much of a document's prose lives.
+			//
+			// The same text in a `.txt` file already went through here, which is
+			// why renaming a file changed what matched. See #1124.
+			//
+			// This costs nothing when it is not needed: segmenting, splitting and
+			// tagging are each switched on only if some rule asks for that scope,
+			// and with all three off this reduces to the lintBlock call it
+			// replaced.
+			return l.lintProse(f, b, state.lines)
 		}
 	}
 

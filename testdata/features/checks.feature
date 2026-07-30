@@ -155,6 +155,23 @@ Feature: Checks
             test2.md:11:6:Bugs.WrongExp:Use 'versus' instead of 'vs '.
             """
 
+    Scenario: Sequence reaches every block
+        When I test "checks/SequenceScopes"
+        Then the output should contain exactly:
+            """
+            test.md:1:14:T.Seq:Sequence matched 'default'.
+            test.md:3:12:T.Seq:Sequence matched 'default'.
+            test.md:3:20:T.Seq:Sequence matched 'database'.
+            test.md:5:15:T.Seq:Sequence matched 'default'.
+            test.md:5:23:T.Seq:Sequence matched 'database'.
+            test.md:7:14:T.Seq:Sequence matched 'default'.
+            test.md:7:22:T.Seq:Sequence matched 'database'.
+            test.md:9:14:T.Seq:Sequence matched 'default'.
+            test.md:9:22:T.Seq:Sequence matched 'database'.
+            test.md:13:14:T.Seq:Sequence matched 'default'.
+            test.md:13:22:T.Seq:Sequence matched 'database'.
+            """
+
     Scenario: Sequence
         When I test "checks/Sequence"
         Then the output should contain exactly:
