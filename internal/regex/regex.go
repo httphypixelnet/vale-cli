@@ -23,7 +23,7 @@ package regex
 import (
 	"strings"
 
-	"github.com/dlclark/regexp2/v2"
+	"github.com/jdkato/regexp2/v2"
 )
 
 // Match is a single regular-expression match.
