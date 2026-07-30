@@ -37,6 +37,17 @@ func cachedSelector(value string) Selector {
 type Selector struct {
 	Value   []string // e.g., text.comment.line.py
 	Negated bool
+
+	// sections is Value split on ".", computed once.
+	//
+	// Contains calls Sections on both operands, so a single scope comparison
+	// re-split both selectors; with a rule run against every block that was
+	// 40% of everything Vale allocated after the scope cache landed. Value
+	// never changes after construction, so the split is done with it.
+	//
+	// A Selector built as a literal rather than through NewSelector leaves
+	// this nil, and Sections falls back to splitting on demand.
+	sections []string
 }
 
 type Scope struct {
@@ -56,7 +67,16 @@ func NewSelector(value []string) Selector {
 		parts = append(parts, m)
 	}
 
-	return Selector{Value: parts, Negated: negated}
+	return Selector{Value: parts, Negated: negated, sections: split(parts)}
+}
+
+// split flattens dotted parts into their sections.
+func split(value []string) []string {
+	parts := make([]string, 0, len(value))
+	for _, m := range value {
+		parts = append(parts, strings.Split(m, ".")...)
+	}
+	return parts
 }
 
 func NewScope(value []string) Scope {
@@ -113,11 +133,12 @@ func (s Scope) partMatches(target, parent Selector, options []Selector) bool {
 // Sections splits a Selector into its parts -- e.g., text.comment.line.py ->
 // []string{"text", "comment", "line", "py"}.
 func (s *Selector) Sections() []string {
-	parts := []string{}
-	for _, m := range s.Value {
-		parts = append(parts, strings.Split(m, ".")...)
+	if s.sections != nil {
+		return s.sections
 	}
-	return parts
+	// Not built by NewSelector. Computed rather than stored, so a Selector
+	// shared between goroutines is not written to behind their backs.
+	return split(s.Value)
 }
 
 // Contains determines if all if sel's sections are in s.
@@ -128,7 +149,7 @@ func (s *Selector) Contains(sel Selector) bool {
 // ContainsString determines if all if sel's sections are in s.
 func (s *Selector) ContainsString(scope []string) bool {
 	for _, option := range scope {
-		sel := Selector{Value: []string{option}}
+		sel := Selector{Value: []string{option}, sections: split([]string{option})}
 		if !s.Contains(sel) {
 			return false
 		}
