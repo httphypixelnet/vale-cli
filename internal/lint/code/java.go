@@ -10,6 +10,7 @@ import (
 func Java() *Language {
 	return &Language{
 		Delims: regexp.MustCompile(`//|/\*|\*/`),
+		Prefix: cStylePrefix,
 		Parser: java.GetLanguage(),
 		Queries: []core.Scope{
 			{Name: "", Expr: "(line_comment)+ @comment", Type: ""},

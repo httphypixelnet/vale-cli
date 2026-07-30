@@ -47,9 +47,18 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 			rText := c.Node.Content(source)
 			cText := qe.lang.Delims.ReplaceAllString(rText, "")
 
+			var strip []int
+
 			scope := "text.comment" + meta + ".line"
 			if strings.Count(cText, "\n") > 1 {
 				scope = "text.comment" + meta + ".block"
+
+				// Blank the per-line decoration before measuring indentation,
+				// so ` * text` is dedented as three spaces rather than read as
+				// a Markdown list item. Blanking keeps the width, so nothing
+				// has moved yet; the dedent below takes it off and records how
+				// much.
+				cText = qe.blankPrefixes(cText)
 
 				// Dedent like Python's inspect.cleandoc: the first line sits on
 				// (or just after) the opening delimiter, so its leading
@@ -62,12 +71,22 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 				common := commonIndent(lines[1:], qe.cutset)
 
 				buf := bytes.Buffer{}
+				strip = make([]int, len(lines))
 				for i, line := range lines {
+					var out string
 					if i == 0 {
-						buf.WriteString(strings.TrimLeft(line, qe.cutset))
+						out = strings.TrimLeft(line, qe.cutset)
 					} else {
-						buf.WriteString(stripIndent(line, common, qe.cutset))
+						out = stripIndent(line, common, qe.cutset)
 					}
+
+					// What came off this line, so an alert reported against it
+					// can be put back exactly. Re-deriving this downstream from
+					// the source line is what makes a non-whitespace cutset
+					// report the wrong column.
+					strip[i] = len(line) - len(out)
+
+					buf.WriteString(out)
 					buf.WriteString("\n")
 				}
 
@@ -80,11 +99,45 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 				Scope:  scope,
 				Text:   cText,
 				Source: rText,
+				Strip:  strip,
 			})
 		}
 	}
 
 	return comments
+}
+
+// blankPrefixes replaces each line's comment decoration with spaces.
+//
+// The width is deliberately unchanged: blanking moves nothing, so the dedent
+// that follows is the only step that has to account for a column, and a
+// language without decoration behaves exactly as it did before.
+func (qe *QueryEngine) blankPrefixes(s string) string {
+	if qe.lang.Prefix == nil {
+		return s
+	}
+
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		loc := qe.lang.Prefix.FindStringSubmatchIndex(line)
+		if loc == nil {
+			continue
+		}
+
+		// Group 1 is the decoration itself. The pattern looks past it to
+		// decide whether it is decoration at all -- `*` followed by a space
+		// starts a line, `*` followed by a letter starts emphasis -- but only
+		// the group is blanked, so the character that settled the question is
+		// left where it was.
+		lo, hi := loc[0], loc[1]
+		if len(loc) > 3 && loc[2] >= 0 {
+			lo, hi = loc[2], loc[3]
+		}
+
+		lines[i] = line[:lo] + strings.Repeat(" ", hi-lo) + line[hi:]
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // commonIndent returns the length, in bytes, of the longest run of leading

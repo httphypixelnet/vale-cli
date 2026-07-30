@@ -10,6 +10,7 @@ import (
 func C() *Language {
 	return &Language{
 		Delims: regexp.MustCompile(`//|/\*|\*/`),
+		Prefix: cStylePrefix,
 		Parser: c.GetLanguage(),
 		Queries: []core.Scope{
 			{Name: "", Expr: "(comment) @comment", Type: ""},

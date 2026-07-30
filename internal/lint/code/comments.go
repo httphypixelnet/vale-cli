@@ -17,6 +17,24 @@ type Comment struct {
 	Line   int
 	Offset int
 	Scope  string
+	// Strip records, for each line of Text, how many bytes were taken off the
+	// front of the matching Source line. An alert's column is meaningful in
+	// Text; putting it back in Source means adding this.
+	//
+	// Empty for a comment that was never dedented, in which case the caller
+	// falls back to measuring the source line itself.
+	//
+	// Not serialised: this is bookkeeping for putting an alert back where it
+	// came from, not part of what a comment is.
+	Strip []int `json:"-"`
+}
+
+// StripAt returns what came off the front of a line, 1-based as alerts are.
+func (c Comment) StripAt(line int) (int, bool) {
+	if line < 1 || line > len(c.Strip) {
+		return 0, false
+	}
+	return c.Strip[line-1], true
 }
 
 // doneMerging determines when we should *stop* concatenating line-scoped
@@ -90,7 +108,15 @@ func coalesce(comments []Comment) []Comment {
 	flush()
 
 	for i, comment := range joined {
-		joined[i].Text = strings.TrimLeft(comment.Text, " ")
+		trimmed := strings.TrimLeft(comment.Text, " ")
+
+		// Trimming the first line moves it, so what came off it grows to
+		// match. A block comment's first line is empty and this is a no-op.
+		if n := len(comment.Text) - len(trimmed); n > 0 && len(comment.Strip) > 0 {
+			joined[i].Strip[0] += n
+		}
+
+		joined[i].Text = trimmed
 	}
 
 	return joined

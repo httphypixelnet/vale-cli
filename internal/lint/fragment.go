@@ -33,10 +33,7 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 		if i >= last {
 			line := findLine(comment.Source, alerts[i].Line)
 
-			padding := lang.Padding(line)
-			if strings.HasPrefix(line, " ") {
-				padding += leadingSpaces(line, comment.Offset)
-			}
+			padding := commentPadding(comment, alerts[i].Line, line, lang)
 
 			alerts[i].Line += comment.Line - 1
 			alerts[i].Span = []int{
@@ -46,6 +43,36 @@ func adjustAlerts(alerts []core.Alert, last int, comment code.Comment, lang *cod
 		}
 	}
 	return alerts
+}
+
+// commentPadding returns how far to move an alert to get from a column in the
+// extracted comment back to a column in the source.
+//
+// A dedented comment recorded exactly what it took off each line, so it is
+// asked rather than measured. Measuring the source line only agrees with the
+// dedent when everything removed was whitespace, which is why a language whose
+// decoration is not whitespace -- JSDoc's ` *` -- reported columns that were
+// short by the width of the decoration.
+//
+// The caller adds comment.Offset separately, and a comment that starts in from
+// the margin has that same indentation counted in what the dedent removed, so
+// it comes back off here. This is what leadingSpaces does for the measured
+// path.
+func commentPadding(comment code.Comment, line int, source string, lang *code.Language) int {
+	if n, ok := comment.StripAt(line); ok {
+		// Strip describes the dedent only. The opening delimiter -- `"""`,
+		// `/**` -- was removed before that by Delims, and it is still on the
+		// line the alert is measured against, so it is added here. On any line
+		// but the first there is no delimiter and this contributes nothing.
+		return lang.Padding(source) + max(n-comment.Offset, 0)
+	}
+
+	padding := lang.Padding(source)
+	if strings.HasPrefix(source, " ") {
+		padding += leadingSpaces(source, comment.Offset)
+	}
+
+	return padding
 }
 
 func (l *Linter) lintFragments(f *core.File) error {

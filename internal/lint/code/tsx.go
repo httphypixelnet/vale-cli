@@ -10,6 +10,7 @@ import (
 func Tsx() *Language {
 	return &Language{
 		Delims:  regexp.MustCompile(`//|/\*|\*/`),
+		Prefix:  cStylePrefix,
 		Parser:  tsx.GetLanguage(),
 		Queries: []core.Scope{{Name: "", Expr: "(comment) @comment", Type: ""}},
 		Padding: cStyle,
