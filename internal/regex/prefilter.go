@@ -1,6 +1,7 @@
 package regex
 
 import (
+	"regexp"
 	"regexp/syntax"
 	"strings"
 )
@@ -21,12 +22,66 @@ import (
 // required. Anything uncertain -- a pattern that will not parse, an optional
 // branch, a character class -- yields nothing, so the pattern runs as before. A
 // prefilter can then only skip work, never change a result.
+// lookaroundStart matches the opening of a lookahead or lookbehind group.
+var lookaroundStart = regexp.MustCompile(`\(\?<?[=!]`)
+
+// withoutLookarounds removes every lookahead and lookbehind from expr,
+// reporting whether it removed any.
+//
+// The group is found by counting parentheses rather than by pattern, so that a
+// nested one is removed with its parent, and an escaped parenthesis inside it
+// is not mistaken for structure.
+func withoutLookarounds(expr string) (string, bool) {
+	var out []byte
+	changed := false
+
+	for i := 0; i < len(expr); {
+		if loc := lookaroundStart.FindStringIndex(expr[i:]); loc != nil && loc[0] == 0 {
+			depth, j := 0, i
+			for ; j < len(expr); j++ {
+				switch expr[j] {
+				case '\\':
+					j++
+				case '(':
+					depth++
+				case ')':
+					depth--
+				}
+				if depth == 0 && expr[j] == ')' {
+					j++
+					break
+				}
+			}
+			i = j
+			changed = true
+
+			continue
+		}
+		out = append(out, expr[i])
+		i++
+	}
+
+	return string(out), changed
+}
+
 func Required(expr string) []string {
 	re, err := syntax.Parse(expr, syntax.Perl)
 	if err != nil {
-		// Lookarounds and backreferences land here: regexp2 accepts them and
-		// regexp/syntax does not. No filter, so no behaviour change.
-		return nil
+		// regexp2 accepts lookarounds and backreferences; regexp/syntax does
+		// not. Dropping the lookarounds gives a pattern this can read, and one
+		// that matches at least everything the original does: a lookaround
+		// constrains a match without contributing to it, so removing it can
+		// only widen the language. A literal the wider pattern requires is
+		// therefore required by the original too, which is what keeps this
+		// sound -- half of a real style's rules reach here.
+		stripped, changed := withoutLookarounds(expr)
+		if !changed {
+			return nil
+		}
+		re, err = syntax.Parse(stripped, syntax.Perl)
+		if err != nil {
+			return nil
+		}
 	}
 
 	lits := literals(re.Simplify())
