@@ -41,23 +41,48 @@ Feature: Scopes
             """
 
     Scenario: Inline scopes (#1002)
-        # Link text, bold and italics are scopes of their own. They are
-        # siblings of `text`, not children, so an ordinary rule does not also
-        # run over them -- the doubling that had this removed before.
+        # Link text, bold, italics and inline code are scopes of their own.
+        # They are siblings of `text`, not children, so an ordinary rule does
+        # not also run over them.
         #
-        # The same words appear as plain prose on line 5 and must not match,
-        # and the nested case on line 7 must report both the link and the bold.
+        # The fixture is built to catch over-matching as much as matching: the
+        # same four words appear as plain prose (line 5) and must not fire, and
+        # the nested case (line 7) must report both the link and the bold.
+        # Lines 17-25 cover composition with the block scopes -- list item,
+        # heading, table cell, blockquote -- and line 28 a link after a soft
+        # line break.
+        #
+        # Lines 9-15 hold the same fragment twice and must report it twice.
+        # That needs each fragment placed where it actually is rather than
+        # where its text first occurs, which is what the walker's record of
+        # where each run of stripped text came from provides.
         When I test scope "inline"
         Then the output should contain exactly:
             """
             test.adoc:1:27:rules.LinkText:link: 'here'
             test.adoc:3:10:rules.StrongText:strong: 'urgent'
             test.adoc:3:31:rules.EmphasisText:emphasis: 'subtle'
+            test.adoc:3:52:rules.CodeText:code: 'deprecated'
             test.md:1:8:rules.LinkText:link: 'here'
             test.md:3:11:rules.StrongText:strong: 'urgent'
             test.md:3:33:rules.EmphasisText:emphasis: 'subtle'
+            test.md:3:54:rules.CodeText:code: 'deprecated'
             test.md:7:6:rules.StrongText:strong: 'urgent'
             test.md:7:20:rules.LinkText:link: 'here'
+            test.md:9:13:rules.LinkText:link: 'here'
+            test.md:9:45:rules.LinkText:link: 'here'
+            test.md:11:4:rules.LinkText:link: 'here'
+            test.md:11:42:rules.LinkText:link: 'here'
+            test.md:13:15:rules.StrongText:strong: 'urgent'
+            test.md:13:31:rules.StrongText:strong: 'urgent'
+            test.md:15:14:rules.CodeText:code: 'deprecated'
+            test.md:15:32:rules.CodeText:code: 'deprecated'
+            test.md:17:21:rules.LinkText:link: 'here'
+            test.md:17:48:rules.StrongText:strong: 'urgent'
+            test.md:19:19:rules.LinkText:link: 'here'
+            test.md:23:17:rules.StrongText:strong: 'urgent'
+            test.md:25:17:rules.EmphasisText:emphasis: 'subtle'
+            test.md:28:13:rules.LinkText:link: 'here'
             """
 
     Scenario: Sentences

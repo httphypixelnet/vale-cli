@@ -118,7 +118,10 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 			skip = core.StringInSlice(txt, skipped)
 			closedInline = false
 			if scope, ok := wanted[txt]; ok {
-				open = append(open, inlineCapture{tag: txt, scope: scope})
+				// A skipped element's text is masked out of the block, so its
+				// capture has to read the text as it arrived instead.
+				open = append(open, inlineCapture{
+					tag: txt, scope: scope, masked: core.StringInSlice(txt, skipped)})
 			}
 			walker.addTag(txt, class)
 		} else if tokt == html.EndTagToken && core.StringInSlice(txt, inlineTags) {
@@ -128,8 +131,9 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 				done := open[n-1]
 				open = open[:n-1]
 				if body := strings.TrimSpace(done.text); body != "" {
-					walker.inline = append(walker.inline,
-						inlineCapture{tag: done.tag, scope: done.scope, text: body})
+					walker.inline = append(walker.inline, inlineCapture{
+						tag: done.tag, scope: done.scope,
+						masked: done.masked, text: body})
 				}
 			}
 		} else if tokt == html.CommentToken {
@@ -168,6 +172,10 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 				// space (#1111) and `<strong>x</strong> :` must not lose one
 				// (#1119).
 				spaced := startsWithSpace(tok.Data)
+				// Kept before `clean`, which empties the text of a skipped
+				// element: inline code never reaches the block, so a capture of
+				// it has nothing else to read.
+				raw := txt
 				txt, skip = clean(txt, attr, skip || skipClass, inline, spaced, closedInline)
 				closedInline = false
 				// `clean` prefixes inline content with a space so it doesn't
@@ -179,11 +187,24 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 				if strings.HasPrefix(txt, " ") && endsWithTightBoundary(buf) {
 					txt = txt[1:]
 				}
+				// Record where this run came from before it loses its identity
+				// in the block. Only a run that survived extraction unchanged
+				// can be mapped; `clean` may have prefixed a space, which
+				// belongs to the block and not to the source.
+				if body := strings.TrimLeft(txt, " "); body == raw {
+					walker.mapRun(buf.Len()+(len(txt)-len(body)), raw)
+				}
 				buf.WriteString(txt)
 				// Feed the same text to any inline element still open, so a
-				// captured fragment matches what the block itself holds.
+				// captured fragment matches what the block itself holds --
+				// except where the block holds nothing, and the text as it was
+				// read is all there is.
 				for j := range open {
-					open[j].text += txt
+					if open[j].masked {
+						open[j].text += raw
+					} else {
+						open[j].text += txt
+					}
 				}
 			}
 		}
@@ -226,7 +247,10 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			}
 			f.Metrics[strings.TrimPrefix(scope, "text.")]++
 
+			shift := len(txt)
 			txt = strings.TrimLeft(txt, " ")
+			shift -= len(txt)
+
 			b := state.block(txt, withClasses(scope, state)+l.metaScope+f.RealExt)
 
 			// Prose, not just a block: a list item or a heading is made of
@@ -247,7 +271,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			if err := l.lintProse(f, b, state.lines); err != nil {
 				return err
 			}
-			return l.lintInline(f, state, b, state.lines)
+			return l.lintInline(f, state, b, state.lines, shift)
 		}
 	}
 
@@ -257,7 +281,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 	if err := l.lintProse(f, b, state.lines); err != nil {
 		return err
 	}
-	return l.lintInline(f, state, b, state.lines)
+	return l.lintInline(f, state, b, state.lines, 0)
 }
 
 // lintInline lints the inline elements captured inside blk -- link text, bold
@@ -266,26 +290,54 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 // Their position comes from the block rather than from the walker's cursor,
 // which the block has already consumed: an inline fragment sits inside the text
 // that was just placed, so its offset is the block's plus its index within it.
-func (l *Linter) lintInline(f *core.File, state *walker, blk nlp.Block, lines int) error {
+func (l *Linter) lintInline(f *core.File, state *walker, blk nlp.Block, lines, shift int) error {
+	// Captures arrive in document order, so each search starts where the last
+	// one ended. Two links with the same text are two alerts; searching from
+	// the start each time would place both on the first and lose one.
+	//
+	// Two cursors, because the two kinds are found in different strings: an
+	// ordinary fragment is part of the block and is translated to the source
+	// through the runs recorded as it was read, while a masked one -- inline
+	// code, written out of the block -- was never in the block to translate.
+	within, source := 0, 0
 	for _, cap := range state.inline {
-		idx := strings.Index(blk.Text, cap.text)
-		if idx < 0 {
-			// Extraction rewrote the text, so there is nothing to point at.
-			continue
+		var at int
+		if cap.masked {
+			at, source = seek(blk.Context, cap.text, source)
+		} else {
+			at, within = seek(blk.Text, cap.text, within)
+			if at >= 0 {
+				at = state.sourceOffset(at + shift)
+			}
 		}
 
 		b := nlp.NewLinedBlock(
 			blk.Context, cap.text, cap.scope+l.metaScope+f.RealExt, blk.Line)
-		if blk.Offset >= 0 {
-			b.Offset = blk.Offset + idx
-		}
+		b.Offset = at
 
-		if err := l.lintBlock(f, b, lines, 0, false, nil); err != nil {
+		// Without an offset the match has to be located by searching, which is
+		// what `lookup` asks for.
+		if err := l.lintBlock(f, b, lines, 0, at < 0, nil); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// seek finds text in s at or after from, returning where it begins and where
+// the next search should start. A miss leaves the cursor where it was, so one
+// fragment that cannot be placed does not displace the rest.
+func seek(s, text string, from int) (int, int) {
+	if from < 0 || from > len(s) {
+		return -1, from
+	}
+	i := strings.Index(s[from:], text)
+	if i < 0 {
+		return -1, from
+	}
+	at := from + i
+	return at, at + len(text)
 }
 
 // withClasses adds the classes enclosing a block to its scope, so that markup

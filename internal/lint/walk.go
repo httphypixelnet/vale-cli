@@ -13,12 +13,29 @@ import (
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
+// srcSpan maps a run of a block's stripped text back to where it came from in
+// the source.
+//
+// Extraction removes markup, so a block's text is not a substring of the source
+// and an index into one is not an index into the other. Recording each run as
+// it is read keeps the correspondence that would otherwise be lost.
+type srcSpan struct {
+	text int // where the run begins in the block's text
+	src  int // where it begins in the source
+	n    int // its length, the same in both
+}
+
 // inlineCapture is the text of one inline element, gathered as the block that
 // contains it is read.
 type inlineCapture struct {
 	tag   string
 	scope string
 	text  string
+
+	// masked records that the block will not hold this text: a skipped
+	// element (inline code) is written out of it, so the fragment has to be
+	// located in the source rather than within the block.
+	masked bool
 }
 
 type walker struct {
@@ -52,6 +69,12 @@ type walker struct {
 	// are reset together, so this is a handful of strings at a time rather
 	// than anything that accumulates across the document.
 	clsHistory []string
+
+	// spans maps this block's text back to the source, and srcCursor is how far
+	// the search for the next run has already gone. Separate from `cursor`,
+	// which places whole blocks and must not be moved by this.
+	spans     []srcSpan
+	srcCursor int
 
 	// inline holds the inline elements captured within the current block --
 	// link text, bold, and so on -- to be linted once the block itself is,
@@ -104,6 +127,7 @@ func (w *walker) reset() {
 	w.tagHistory = []string{}
 	w.clsHistory = []string{}
 	w.inline = nil
+	w.spans = nil
 }
 
 func (w *walker) getCtx() string {
@@ -220,6 +244,35 @@ func (w *walker) locate(text string) int {
 	w.cursor = off + len(text)
 
 	return off
+}
+
+// mapRun records that the run of text at `at` in the current block came from
+// `raw` in the source, if that can be found from where the last run ended.
+func (w *walker) mapRun(at int, raw string) {
+	ctx := w.getCtx()
+	if raw == "" || w.srcCursor > len(ctx) {
+		return
+	}
+
+	i := strings.Index(ctx[w.srcCursor:], raw)
+	if i < 0 {
+		return
+	}
+
+	src := w.srcCursor + i
+	w.srcCursor = src + len(raw)
+	w.spans = append(w.spans, srcSpan{text: at, src: src, n: len(raw)})
+}
+
+// sourceOffset returns where index `i` of the block's text sits in the source,
+// or -1 if that run was never mapped.
+func (w *walker) sourceOffset(i int) int {
+	for _, s := range w.spans {
+		if i >= s.text && i < s.text+s.n {
+			return s.src + (i - s.text)
+		}
+	}
+	return -1
 }
 
 func (w *walker) walk() (html.TokenType, html.Token, string) {
