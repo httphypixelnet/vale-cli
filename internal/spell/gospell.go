@@ -267,7 +267,7 @@ func newGoSpellReader(aff, dic io.Reader) (*goSpell, error) {
 		compounds:   make([]*regexp.Regexp, 0, len(affix.CompoundRule)),
 		splitter:    newSplitter(affix.WordChars),
 		canCompound: affix.compoundingEnabled(),
-		compoundMin: int(affix.CompoundMin),
+		compoundMin: affix.CompoundMin,
 	}
 
 	words := []string{}

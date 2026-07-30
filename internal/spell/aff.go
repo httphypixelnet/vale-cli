@@ -70,6 +70,16 @@ type rule struct {
 }
 
 // dictConfig is a partial representation of a Hunspell AFF (Affix) file.
+const (
+	// defaultCompoundMin is Hunspell's own default for COMPOUNDMIN.
+	defaultCompoundMin = 3
+	// maxCompoundMin is where a COMPOUNDMIN stops being a plausible word
+	// length and starts being a typo or worse.
+	maxCompoundMin = 100
+	// maxCompoundRules caps what a COMPOUNDRULE count may preallocate.
+	maxCompoundRules = 1 << 16
+)
+
 type dictConfig struct {
 	IconvReplacements []string
 	Replacements      [][2]string
@@ -84,7 +94,7 @@ type dictConfig struct {
 	CompoundEnd       string
 	AffixMap          map[string]affix
 	CamelCase         int
-	CompoundMin       int64
+	CompoundMin       int
 	compoundMap       map[string][]string
 	NoSuggestFlag     string
 }
@@ -274,7 +284,7 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 		Flag:        "ASCII",
 		AffixMap:    make(map[string]affix),
 		compoundMap: make(map[string][]string),
-		CompoundMin: 3, // default in Hunspell
+		CompoundMin: defaultCompoundMin,
 	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -311,9 +321,16 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 			if len(parts) < 2 {
 				return nil, fmt.Errorf("COMPOUNDMIN stanza had %d fields, expected 2", len(parts))
 			}
-			val, err := strconv.ParseInt(parts[1], 10, 64)
+			val, err := strconv.Atoi(parts[1])
 			if err != nil {
 				return nil, fmt.Errorf("COMPOUNDMIN stanza had %q expected number", parts[1])
+			}
+			// Hunspell ignores a value outside this range and uses its default,
+			// rather than refusing the dictionary; a `.aff` is data we are given,
+			// so an absurd length is not worth failing over. Bounding it here is
+			// also what keeps the value safe to use as a length below.
+			if val < 1 || val > maxCompoundMin {
+				val = defaultCompoundMin
 			}
 			aff.CompoundMin = val
 		case "ONLYINCOMPOUND":
@@ -325,9 +342,12 @@ func newDictConfig(file io.Reader) (*dictConfig, error) { //nolint:funlen
 			if len(parts) < 2 {
 				return nil, fmt.Errorf("COMPOUNDRULE stanza had %d fields, expected 2", len(parts))
 			}
-			val, err := strconv.ParseInt(parts[1], 10, 64)
+			val, err := strconv.Atoi(parts[1])
 			if err == nil {
-				aff.CompoundRule = make([]string, 0, val)
+				// A count read from the file, so it only preallocates -- the
+				// slice grows on its own if the count was low, and a wild one
+				// cannot ask for an enormous allocation.
+				aff.CompoundRule = make([]string, 0, min(max(val, 0), maxCompoundRules))
 			} else {
 				aff.CompoundRule = append(aff.CompoundRule, parts[1])
 				for _, flag := range aff.parseFlags(parts[1]) {

@@ -364,3 +364,51 @@ loop/1
 		t.Fatal("expansion did not terminate on a self-continuing affix class")
 	}
 }
+
+// A `.aff` is data Vale is handed, so a COMPOUNDMIN it cannot use must not
+// reach the code that treats it as a length.
+func TestCompoundMinIsBounded(t *testing.T) {
+	tests := map[string]int{
+		"COMPOUNDMIN 4":                   4,
+		"COMPOUNDMIN 1":                   1,
+		"COMPOUNDMIN 0":                   defaultCompoundMin,
+		"COMPOUNDMIN -1":                  defaultCompoundMin,
+		"COMPOUNDMIN 9223372036854775807": defaultCompoundMin,
+	}
+
+	for line, want := range tests {
+		aff, err := newDictConfig(strings.NewReader(line))
+		if err != nil {
+			t.Errorf("%q: %v", line, err)
+			continue
+		}
+		if aff.CompoundMin != want {
+			t.Errorf("%q: CompoundMin = %d, want %d", line, aff.CompoundMin, want)
+		}
+	}
+}
+
+// A number too large to represent is refused outright, as any other
+// unparseable COMPOUNDMIN already was.
+func TestCompoundMinRejectsUnparseable(t *testing.T) {
+	for _, line := range []string{
+		"COMPOUNDMIN 99999999999999999999",
+		"COMPOUNDMIN four",
+	} {
+		if _, err := newDictConfig(strings.NewReader(line)); err == nil {
+			t.Errorf("%q: expected an error", line)
+		}
+	}
+}
+
+// A COMPOUNDRULE count only preallocates, so a wild one must not be able to
+// ask for an enormous allocation.
+func TestCompoundRuleCapacityIsBounded(t *testing.T) {
+	aff, err := newDictConfig(strings.NewReader("COMPOUNDRULE 9223372036854775807"))
+	if err != nil {
+		t.Fatalf("parsing: %v", err)
+	}
+	if cap(aff.CompoundRule) > maxCompoundRules {
+		t.Errorf("capacity = %d, want <= %d", cap(aff.CompoundRule), maxCompoundRules)
+	}
+}
