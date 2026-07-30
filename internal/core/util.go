@@ -170,6 +170,18 @@ func Indent(text, indent string) string {
 	return result[:len(result)-1]
 }
 
+// StyleName returns the style a rule belongs to -- `proselint` for
+// `proselint.Typography`.
+//
+// A config may name either, so that a setting can be given once for a style and
+// then overridden for a rule within it.
+func StyleName(rule string) string {
+	if style, _, found := strings.Cut(rule, "."); found {
+		return style
+	}
+	return rule
+}
+
 // StringInSlice determines if `slice` contains the string `a`.
 func StringInSlice(a string, slice []string) bool {
 	for _, b := range slice {

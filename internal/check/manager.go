@@ -254,7 +254,12 @@ func (mgr *Manager) compileCheck(file []byte, chkName, path string) (Rule, bool,
 	generic["name"] = chkName
 	generic["path"] = path
 
+	// A level set for the rule wins; a level set for its style covers the rest
+	// of that style, so `proselint = suggestion` can be written once and
+	// `proselint.Typography = warning` kept alongside it.
 	if level, ok := mgr.Config.RuleToLevel[chkName]; ok {
+		generic["level"] = level
+	} else if level, ok = mgr.Config.RuleToLevel[core.StyleName(chkName)]; ok {
 		generic["level"] = level
 	} else if _, ok = generic["level"]; !ok {
 		generic["level"] = "warning"

@@ -317,6 +317,16 @@ func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup b
 	return nil
 }
 
+// lookup reads a setting given for a rule, falling back to one given for the
+// style it belongs to.
+func lookup(settings map[string]bool, rule, style string) (bool, bool) {
+	if val, ok := settings[rule]; ok {
+		return val, true
+	}
+	val, ok := settings[style]
+	return val, ok
+}
+
 func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule, blk nlp.Block) bool {
 	minLevel := l.Manager.Config.MinAlertLevel
 	run := false
@@ -340,8 +350,14 @@ func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule, blk nlp.Bl
 		return false
 	}
 
+	style := core.StyleName(name)
+
 	// Has the check been disabled for this extension?
-	if val, ok := f.Checks[name]; ok && !run {
+	//
+	// The rule's own setting is looked for first and the style's only after,
+	// so that `proselint = NO` can turn a style off while
+	// `proselint.Typography = YES` keeps one of its rules.
+	if val, ok := lookup(f.Checks, name, style); ok && !run {
 		if !val {
 			return false
 		}
@@ -349,14 +365,13 @@ func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule, blk nlp.Bl
 	}
 
 	// Has the check been disabled for all extensions?
-	if val, ok := l.Manager.Config.GChecks[name]; ok && !run {
+	if val, ok := lookup(l.Manager.Config.GChecks, name, style); ok && !run {
 		if !val {
 			return false
 		}
 		run = true
 	}
 
-	style := strings.Split(name, ".")[0]
 	if !run && !core.StringInSlice(style, f.BaseStyles) {
 		return false
 	}
