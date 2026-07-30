@@ -1,0 +1,10 @@
+---
+# A block that markup distinguishes by class rather than by tag: an AsciiDoc
+# block title converts to `<div class="title">`, which no tag-based scope can
+# reach. See #642.
+extends: existence
+message: "class scope matched '%s'"
+level: warning
+scope: class.title
+tokens:
+  - widget

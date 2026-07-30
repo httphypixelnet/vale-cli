@@ -31,6 +31,15 @@ Feature: Scopes
             test.rst:3:22:rules.Quote:Don't use 'here' in a blockquote.
             """
 
+    Scenario: Class
+        # An AsciiDoc block title is a `<div class="title">`, so no tag-based
+        # scope reaches it; the heading, paragraph and list item must not match.
+        When I test scope "class"
+        Then the output should contain exactly:
+            """
+            test.adoc:3:4:rules.Class:class scope matched 'widget'
+            """
+
     Scenario: Sentences
         When I test scope "sentence"
         Then the output should contain exactly:

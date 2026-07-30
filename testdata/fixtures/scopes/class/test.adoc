@@ -1,0 +1,13 @@
+= A widget document
+
+.A widget block title
+[source,yaml]
+----
+key: value
+----
+
+== A widget heading
+
+A widget in an ordinary paragraph.
+
+* A widget in a list item.

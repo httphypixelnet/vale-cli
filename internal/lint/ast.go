@@ -89,7 +89,7 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 			inline = core.StringInSlice(txt, inlineTags)
 			skip = core.StringInSlice(txt, skipped)
 			closedInline = false
-			walker.addTag(txt)
+			walker.addTag(txt, class)
 		} else if tokt == html.EndTagToken && core.StringInSlice(txt, inlineTags) {
 			walker.activeTag = ""
 			closedInline = true
@@ -183,7 +183,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			f.Metrics[strings.TrimPrefix(scope, "text.")]++
 
 			txt = strings.TrimLeft(txt, " ")
-			b := state.block(txt, scope+l.metaScope+f.RealExt)
+			b := state.block(txt, withClasses(scope, state)+l.metaScope+f.RealExt)
 
 			// Prose, not just a block: a list item or a heading is made of
 			// sentences the same way a paragraph is, and only this path segments
@@ -206,8 +206,20 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 
 	f.Summary.WriteString(txt + "\n\n")
 
-	b := state.block(txt, "text"+l.metaScope+f.RealExt)
+	b := state.block(txt, withClasses("text", state)+l.metaScope+f.RealExt)
 	return l.lintProse(f, b, state.lines)
+}
+
+// withClasses adds the classes enclosing a block to its scope, so that markup
+// carrying no distinct tag can still be selected. An AsciiDoc block title is a
+// `<div class="title">`, indistinguishable from body text by tag alone, and
+// becomes `text.class.title` here. See #642.
+func withClasses(scope string, state *walker) string {
+	classes := state.classes()
+	if len(classes) == 0 {
+		return scope
+	}
+	return scope + ".class." + strings.Join(classes, ".class.")
 }
 
 func (l *Linter) lintSizedScopes(f *core.File) error {

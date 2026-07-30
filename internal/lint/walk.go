@@ -39,6 +39,12 @@ type walker struct {
 	// on every non-inline end tag.
 	tagHistory []string
 
+	// clsHistory holds the `class` of each tag in tagHistory, at the same
+	// index, so that a block can be scoped by the classes enclosing it. Both
+	// are reset together, so this is a handful of strings at a time rather
+	// than anything that accumulates across the document.
+	clsHistory []string
+
 	begin int
 	end   int
 
@@ -83,6 +89,7 @@ func (w *walker) reset() {
 	}
 	w.queue = []string{}
 	w.tagHistory = []string{}
+	w.clsHistory = []string{}
 }
 
 func (w *walker) getCtx() string {
@@ -99,9 +106,34 @@ func (w *walker) append(text string) {
 	}
 }
 
-func (w *walker) addTag(tag string) {
+func (w *walker) addTag(tag, class string) {
 	w.tagHistory = append(w.tagHistory, tag)
+	w.clsHistory = append(w.clsHistory, class)
 	w.activeTag = tag
+}
+
+// classes returns the classes enclosing the current block, in the order they
+// were opened and without repeats.
+func (w *walker) classes() []string {
+	var found []string
+	for _, cls := range w.clsHistory {
+		for _, name := range strings.Fields(cls) {
+			if scopeSafe(name) && !core.StringInSlice(name, found) {
+				found = append(found, name)
+			}
+		}
+	}
+	return found
+}
+
+// scopeSafe reports whether a class can be used as part of a scope.
+//
+// A scope is split on `.`, combined with `&` and negated with `~`, so a class
+// holding one of those would not survive the round trip. Those are dropped
+// rather than rewritten: a silently altered name is harder to explain than an
+// absent one.
+func scopeSafe(class string) bool {
+	return class != "" && !strings.ContainsAny(class, ".&~")
 }
 
 func (w *walker) setCls(tag string, cls bool) {

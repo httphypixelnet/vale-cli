@@ -101,3 +101,50 @@ func TestSubInplaceReadOnlyBacking(t *testing.T) {
 		t.Fatalf("result = %q; want %q", string(buf), "@@@@")
 	}
 }
+
+func TestScopeSafe(t *testing.T) {
+	cases := map[string]bool{
+		"title":           true,
+		"admonitionblock": true,
+		"sect-level1":     true,
+		"h2":              true,
+		"":                false,
+		"a.b":             false, // `.` separates scope parts
+		"a&b":             false, // `&` combines them
+		"~a":              false, // `~` negates one
+	}
+	for in, want := range cases {
+		if got := scopeSafe(in); got != want {
+			t.Errorf("scopeSafe(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestWalkerClasses(t *testing.T) {
+	tests := []struct {
+		name string
+		cls  []string
+		want []string
+	}{
+		{"none", []string{"", ""}, nil},
+		{"one", []string{"", "title"}, []string{"title"}},
+		{"multi-valued", []string{"admonitionblock note"}, []string{"admonitionblock", "note"}},
+		{"repeats collapse", []string{"title", "title"}, []string{"title"}},
+		{"unsafe dropped", []string{"a.b good"}, []string{"good"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &walker{clsHistory: tt.cls}
+			got := w.classes()
+			if len(got) != len(tt.want) {
+				t.Fatalf("classes() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("classes() = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
