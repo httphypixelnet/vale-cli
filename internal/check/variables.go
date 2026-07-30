@@ -2,6 +2,7 @@ package check
 
 import (
 	"strings"
+	"sync"
 
 	rx "github.com/errata-ai/vale/v3/internal/regex"
 	"github.com/jdkato/prose/v3/strcase"
@@ -10,6 +11,30 @@ import (
 )
 
 var reNumberList = rx.MustCompile(`\d+\.`)
+
+// tokenPattern is the expression the capitalization checks split words with.
+//
+// It depends only on the rule's `exceptions`, which are fixed when the rule
+// loads, but it was built and compiled on every call -- once per check per
+// block. Compiling a pattern is not cheap, and this one was recompiled
+// hundreds of times over a single document.
+var tokenPattern sync.Map
+
+func wordsIn(except *rx.Regexp) *rx.Regexp {
+	ps := `[\p{N}\p{L}*]+[^\s]*`
+	if except != nil && except.String() != "" {
+		ps = except.String() + "|" + ps
+	}
+
+	if hit, ok := tokenPattern.Load(ps); ok {
+		return hit.(*rx.Regexp) //nolint:errcheck // only *rx.Regexp is stored
+	}
+
+	re := rx.MustCompile(ps)
+	tokenPattern.Store(ps, re)
+
+	return re
+}
 
 var varToFunc = map[string]func(string, *rx.Regexp) (string, bool){
 	"$lower": lower,
@@ -63,11 +88,7 @@ func title(s string, except *rx.Regexp, tc *strcase.TitleConverter, threshold fl
 	count := 0.0
 	words := 0.0
 
-	ps := `[\p{N}\p{L}*]+[^\s]*`
-	if except != nil && except.String() != "" {
-		ps = except.String() + "|" + ps
-	}
-	re := rx.MustCompile(ps)
+	re := wordsIn(except)
 
 	expected := tc.Convert(s)
 	expectedTokens := re.FindAllString(expected, -1)
@@ -101,11 +122,7 @@ func sentence(s string, except *rx.Regexp, sc *strcase.SentenceConverter, thresh
 	count := 0.0
 	words := 0.0
 
-	ps := `[\p{N}\p{L}*]+[^\s]*`
-	if except != nil && except.String() != "" {
-		ps = except.String() + "|" + ps
-	}
-	re := rx.MustCompile(ps)
+	re := wordsIn(except)
 
 	expected := sc.Convert(s)
 	expectedTokens := re.FindAllString(expected, -1)
