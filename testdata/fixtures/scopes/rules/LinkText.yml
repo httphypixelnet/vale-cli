@@ -1,0 +1,9 @@
+---
+# Inline elements are scopes of their own -- siblings of `text`, so an
+# ordinary rule does not also run over them. See #1002.
+extends: existence
+message: "link: '%s'"
+level: warning
+scope: link
+tokens:
+  - here

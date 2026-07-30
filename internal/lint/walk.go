@@ -13,6 +13,14 @@ import (
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
+// inlineCapture is the text of one inline element, gathered as the block that
+// contains it is read.
+type inlineCapture struct {
+	tag   string
+	scope string
+	text  string
+}
+
 type walker struct {
 	lines   int
 	context []byte
@@ -44,6 +52,11 @@ type walker struct {
 	// are reset together, so this is a handful of strings at a time rather
 	// than anything that accumulates across the document.
 	clsHistory []string
+
+	// inline holds the inline elements captured within the current block --
+	// link text, bold, and so on -- to be linted once the block itself is,
+	// since their position is derived from its own. Reset with the block.
+	inline []inlineCapture
 
 	begin int
 	end   int
@@ -90,6 +103,7 @@ func (w *walker) reset() {
 	w.queue = []string{}
 	w.tagHistory = []string{}
 	w.clsHistory = []string{}
+	w.inline = nil
 }
 
 func (w *walker) getCtx() string {

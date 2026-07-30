@@ -1,0 +1,8 @@
+StylesPath = ../../scopes
+MinAlertLevel = suggestion
+
+[*]
+rules.LinkText = YES
+rules.StrongText = YES
+rules.EmphasisText = YES
+rules.CodeText = YES

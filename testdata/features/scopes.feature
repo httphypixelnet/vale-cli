@@ -40,6 +40,26 @@ Feature: Scopes
             test.adoc:3:4:rules.Class:class scope matched 'widget'
             """
 
+    Scenario: Inline scopes (#1002)
+        # Link text, bold and italics are scopes of their own. They are
+        # siblings of `text`, not children, so an ordinary rule does not also
+        # run over them -- the doubling that had this removed before.
+        #
+        # The same words appear as plain prose on line 5 and must not match,
+        # and the nested case on line 7 must report both the link and the bold.
+        When I test scope "inline"
+        Then the output should contain exactly:
+            """
+            test.adoc:1:27:rules.LinkText:link: 'here'
+            test.adoc:3:10:rules.StrongText:strong: 'urgent'
+            test.adoc:3:31:rules.EmphasisText:emphasis: 'subtle'
+            test.md:1:8:rules.LinkText:link: 'here'
+            test.md:3:11:rules.StrongText:strong: 'urgent'
+            test.md:3:33:rules.EmphasisText:emphasis: 'subtle'
+            test.md:7:6:rules.StrongText:strong: 'urgent'
+            test.md:7:20:rules.LinkText:link: 'here'
+            """
+
     Scenario: Sentences
         When I test scope "sentence"
         Then the output should contain exactly:

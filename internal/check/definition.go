@@ -16,8 +16,6 @@ import (
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
-var inlineScopes = []string{"code", "link", "strong", "emphasis"}
-
 // FilterEnv is the environment passed to the `--filter` flag.
 type FilterEnv struct {
 	Rules []Definition
@@ -480,13 +478,6 @@ func checkScopes(scopes []string, path string) error {
 		//
 		// TODO: check sub-scopes too?
 		scope = strings.Split(scope, ".")[0]
-
-		if core.StringInSlice(scope, inlineScopes) {
-			return core.NewE201FromTarget(
-				fmt.Sprintf("scope '%v' is no longer supported; use 'raw' instead.", scope),
-				"scope",
-				path)
-		}
 
 		// No spaces
 		if strings.Contains(scope, " ") {

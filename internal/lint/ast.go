@@ -22,6 +22,24 @@ var skipClasses = []string{"problematic", "pre", "code"}
 var inlineTags = []string{
 	"b", "big", "i", "small", "abbr", "acronym", "cite", "dfn", "em", "kbd",
 	"strong", "a", "br", "img", "span", "sub", "sup", "code", "tt", "del"}
+
+// inlineToScope names the inline elements that can be scoped on their own.
+//
+// These are siblings of `text`, not children of it: a scope of `text` is
+// matched by containment, so `text.link` would be matched by every ordinary
+// rule and the whole style would run a second time over each link. That
+// doubling is why the previous attempt at this was removed. As `link`, only a
+// rule that asks for one does any work.
+var inlineToScope = map[string]string{
+	"a":      "link",
+	"strong": "strong",
+	"b":      "strong",
+	"em":     "emphasis",
+	"i":      "emphasis",
+	"code":   "code",
+	"tt":     "code",
+}
+
 var tagToScope = map[string]string{
 	"th":         "text.table.header",
 	"td":         "text.table.cell",
@@ -53,6 +71,16 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 	if len(l.Manager.Config.IgnoredScopes) > 0 {
 		skipped = l.Manager.Config.IgnoredScopes
 	}
+
+	// Inline elements the style actually asks about; nothing is captured for
+	// the rest, so a style that scopes none of them pays nothing at all.
+	wanted := map[string]string{}
+	for tag, scope := range inlineToScope {
+		if l.Manager.HasScope(scope) {
+			wanted[tag] = scope
+		}
+	}
+	var open []inlineCapture
 
 	walker := newWalker(f, raw, offset)
 	for {
@@ -89,10 +117,21 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 			inline = core.StringInSlice(txt, inlineTags)
 			skip = core.StringInSlice(txt, skipped)
 			closedInline = false
+			if scope, ok := wanted[txt]; ok {
+				open = append(open, inlineCapture{tag: txt, scope: scope})
+			}
 			walker.addTag(txt, class)
 		} else if tokt == html.EndTagToken && core.StringInSlice(txt, inlineTags) {
 			walker.activeTag = ""
 			closedInline = true
+			if n := len(open); n > 0 && open[n-1].tag == txt {
+				done := open[n-1]
+				open = open[:n-1]
+				if body := strings.TrimSpace(done.text); body != "" {
+					walker.inline = append(walker.inline,
+						inlineCapture{tag: done.tag, scope: done.scope, text: body})
+				}
+			}
 		} else if tokt == html.CommentToken {
 			f.UpdateComments(txt)
 			walker.update(txt, tokt)
@@ -141,6 +180,11 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 					txt = txt[1:]
 				}
 				buf.WriteString(txt)
+				// Feed the same text to any inline element still open, so a
+				// captured fragment matches what the block itself holds.
+				for j := range open {
+					open[j].text += txt
+				}
 			}
 		}
 
@@ -200,14 +244,48 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			// tagging are each switched on only if some rule asks for that scope,
 			// and with all three off this reduces to the lintBlock call it
 			// replaced.
-			return l.lintProse(f, b, state.lines)
+			if err := l.lintProse(f, b, state.lines); err != nil {
+				return err
+			}
+			return l.lintInline(f, state, b, state.lines)
 		}
 	}
 
 	f.Summary.WriteString(txt + "\n\n")
 
 	b := state.block(txt, withClasses("text", state)+l.metaScope+f.RealExt)
-	return l.lintProse(f, b, state.lines)
+	if err := l.lintProse(f, b, state.lines); err != nil {
+		return err
+	}
+	return l.lintInline(f, state, b, state.lines)
+}
+
+// lintInline lints the inline elements captured inside blk -- link text, bold
+// and so on -- as scopes of their own.
+//
+// Their position comes from the block rather than from the walker's cursor,
+// which the block has already consumed: an inline fragment sits inside the text
+// that was just placed, so its offset is the block's plus its index within it.
+func (l *Linter) lintInline(f *core.File, state *walker, blk nlp.Block, lines int) error {
+	for _, cap := range state.inline {
+		idx := strings.Index(blk.Text, cap.text)
+		if idx < 0 {
+			// Extraction rewrote the text, so there is nothing to point at.
+			continue
+		}
+
+		b := nlp.NewLinedBlock(
+			blk.Context, cap.text, cap.scope+l.metaScope+f.RealExt, blk.Line)
+		if blk.Offset >= 0 {
+			b.Offset = blk.Offset + idx
+		}
+
+		if err := l.lintBlock(f, b, lines, 0, false, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // withClasses adds the classes enclosing a block to its scope, so that markup
