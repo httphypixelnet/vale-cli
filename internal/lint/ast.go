@@ -220,7 +220,7 @@ func (l *Linter) lintSizedScopes(f *core.File) error {
 		"summary"+f.RealExt, 0)
 
 	for _, blk := range []nlp.Block{summary} {
-		err := l.lintBlock(f, blk, len(f.Lines), 0, true)
+		err := l.lintBlock(f, blk, len(f.Lines), 0, true, nil)
 		if err != nil {
 			return err
 		}
@@ -236,7 +236,7 @@ func (l *Linter) lintTags(f *core.File, state *walker, tok html.Token) error {
 			if a.Key == "alt" && !ignored {
 				err := l.lintBlock(
 					f,
-					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false)
+					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false, nil)
 				if err != nil {
 					return err
 				}

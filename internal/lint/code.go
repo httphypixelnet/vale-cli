@@ -118,7 +118,7 @@ func (l *Linter) lintCodeOld(f *core.File) error {
 				b := nlp.NewBlock(
 					txt, txt, fmt.Sprintf(scope, "text.comment.block"))
 				if !(skipAll || skipBlock) {
-					if err := l.lintBlock(f, b, lines+1, 0, true); err != nil {
+					if err := l.lintBlock(f, b, lines+1, 0, true, nil); err != nil {
 						return err
 					}
 				}
@@ -137,7 +137,7 @@ func (l *Linter) lintCodeOld(f *core.File) error {
 			b := nlp.NewBlock(
 				match, match, fmt.Sprintf(scope, "text.comment.line"))
 			if !(skipAll || skipInline) {
-				if err := l.lintBlock(f, b, lines, padding-1, true); err != nil {
+				if err := l.lintBlock(f, b, lines, padding-1, true, nil); err != nil {
 					return err
 				}
 			}

@@ -226,7 +226,7 @@ func (l *Linter) lintFile(src string) lintResult {
 		//
 		// See #248, #306.
 		raw := nlp.NewBlock("", strings.Join(file.Lines, ""), "raw"+file.RealExt)
-		err = l.lintBlock(file, raw, len(file.Lines), 0, true)
+		err = l.lintBlock(file, raw, len(file.Lines), 0, true, nil)
 	}
 
 	return lintResult{file, err}
@@ -245,8 +245,22 @@ func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int) error {
 	//
 	// See fixtures/i18n for an example.
 	needsLookup := strings.Count(blk.Text, "\n") > 0 || f.Lookup
+
+	// Segmenting hands back blocks that differ in scope but not always in
+	// text: a one-sentence paragraph or list item yields a `sentence.*` block
+	// holding exactly what the block itself holds. A rule's scope is matched by
+	// containment, so a `text`-scoped rule matches both and would run twice
+	// over the same string, for an alert the second run cannot add -- the
+	// duplicate is dropped when it is reported.
+	//
+	// Running each rule once per distinct text removes that. Rules that read
+	// only their block are unaffected by definition; the two that carry state
+	// across blocks stay correct because `consistency` accumulates a set, which
+	// a repeated append cannot change, and `occurrence` counts within the text
+	// it is given, which is identical or it would not be skipped.
+	done := map[string]bool{}
 	for _, b := range blks {
-		err = l.lintBlock(f, b, lines, 0, needsLookup)
+		err = l.lintBlock(f, b, lines, 0, needsLookup, done)
 		if err != nil {
 			return err
 		}
@@ -262,14 +276,27 @@ func (l *Linter) lintTxt(f *core.File) error {
 
 func (l *Linter) lintLines(f *core.File) error {
 	block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
-	return l.lintBlock(f, block, len(f.Lines), 0, true)
+	return l.lintBlock(f, block, len(f.Lines), 0, true, nil)
 }
 
-func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool) error {
+// lintBlock runs every applicable rule over blk.
+//
+// `done` records the rules already run against a given text, so that blocks
+// which differ only in scope do not run the same rule over the same string
+// twice; pass nil when there is nothing to deduplicate against.
+func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool, done map[string]bool) error {
 	f.ChkToCtx = make(map[string]string)
 	for name, chk := range l.Manager.Rules() {
 		if !l.shouldRun(name, f, chk, blk) {
 			continue
+		}
+
+		if done != nil {
+			key := name + "\x00" + blk.Text
+			if done[key] {
+				continue
+			}
+			done[key] = true
 		}
 
 		info := chk.Fields()
