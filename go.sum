@@ -65,8 +65,8 @@ github.com/jdkato/go-tree-sitter-julia v0.1.0 h1:z+6zTbd6PHMKAge7GJx9QIwPQX2NOKb
 github.com/jdkato/go-tree-sitter-julia v0.1.0/go.mod h1:lXNEZorcvU63DcANEklLMbDRjwam4VQ44MIV1Cck0w8=
 github.com/jdkato/prose/v3 v3.2.1 h1:yaQMEjBkCe3+mUlgXIM5mJKf0Z6/vrrvBSqzCSTbf+U=
 github.com/jdkato/prose/v3 v3.2.1/go.mod h1:VRQyR/EyA6bX457JTCIF67n04ycHek4v6v0veGiJvUk=
-github.com/jdkato/regexp2/v2 v2.5.3 h1:n0cXb7hIyDGURtbV8kYvkvr66hz4rPBORti48s4txzA=
-github.com/jdkato/regexp2/v2 v2.5.3/go.mod h1:1n+mjFZuqC5X6WEkQsenuS9JbxTRoHL6Jzs1UzGLcPk=
+github.com/jdkato/regexp2/v2 v2.5.4 h1:Gm6RFyWKXqQ0fr1cgDIp3iaoTDAauOB+PwMb5tUi26o=
+github.com/jdkato/regexp2/v2 v2.5.4/go.mod h1:1n+mjFZuqC5X6WEkQsenuS9JbxTRoHL6Jzs1UzGLcPk=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
 github.com/klauspost/cpuid/v2 v2.0.10/go.mod h1:g2LTdtYhdyuGPqyWyv7qRAmj1WBqxuObKfj5c0PQa7c=
 github.com/klauspost/cpuid/v2 v2.0.12 h1:p9dKCg8i4gmOxtv35DvrYoWqYzQrvEVdjQ762Y0OqZE=
