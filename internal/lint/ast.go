@@ -323,7 +323,7 @@ func (l *Linter) lintInline(f *core.File, state *walker, blk nlp.Block, lines, s
 
 		// Without an offset the match has to be located by searching, which is
 		// what `lookup` asks for.
-		if err := l.lintBlock(f, b, lines, 0, at < 0, nil); err != nil {
+		if err := l.lintBlock(f, b, lines, 0, at < 0); err != nil {
 			return err
 		}
 	}
@@ -368,7 +368,7 @@ func (l *Linter) lintSizedScopes(f *core.File) error {
 		"summary"+f.RealExt, 0)
 
 	for _, blk := range []nlp.Block{summary} {
-		err := l.lintBlock(f, blk, len(f.Lines), 0, true, nil)
+		err := l.lintBlock(f, blk, len(f.Lines), 0, true)
 		if err != nil {
 			return err
 		}
@@ -384,7 +384,7 @@ func (l *Linter) lintTags(f *core.File, state *walker, tok html.Token) error {
 			if a.Key == "alt" && !ignored {
 				err := l.lintBlock(
 					f,
-					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false, nil)
+					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false)
 				if err != nil {
 					return err
 				}

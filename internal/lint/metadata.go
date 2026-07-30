@@ -41,7 +41,7 @@ func (l Linter) lintMetadata(f *core.File) error {
 				continue
 			}
 
-			lErr := l.lintBlock(f, block, len(f.Lines), 0, false, nil)
+			lErr := l.lintBlock(f, block, len(f.Lines), 0, false)
 			if lErr != nil {
 				return lErr
 			}

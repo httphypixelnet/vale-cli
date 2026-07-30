@@ -244,7 +244,7 @@ func (l *Linter) lintFile(src string) lintResult {
 		//
 		// See #248, #306.
 		raw := nlp.NewBlock("", strings.Join(file.Lines, ""), "raw"+file.RealExt)
-		err = l.lintBlock(file, raw, len(file.Lines), 0, true, nil)
+		err = l.lintBlock(file, raw, len(file.Lines), 0, true)
 	}
 
 	return lintResult{file, err}
@@ -265,20 +265,15 @@ func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int) error {
 	needsLookup := strings.Count(blk.Text, "\n") > 0 || f.Lookup
 
 	// Segmenting hands back blocks that differ in scope but not always in
-	// text: a one-sentence paragraph or list item yields a `sentence.*` block
-	// holding exactly what the block itself holds. A rule's scope is matched by
-	// containment, so a `text`-scoped rule matches both and would run twice
-	// over the same string, for an alert the second run cannot add -- the
-	// duplicate is dropped when it is reported.
+	// text, so a rule matching both runs twice over the same string. The second
+	// run reports nothing the first did not, and it was once worth tracking
+	// which rules had already seen a text to skip it.
 	//
-	// Running each rule once per distinct text removes that. Rules that read
-	// only their block are unaffected by definition; the two that carry state
-	// across blocks stay correct because `consistency` accumulates a set, which
-	// a repeated append cannot change, and `occurrence` counts within the text
-	// it is given, which is identical or it would not be skipped.
-	done := map[string]map[string]bool{}
+	// It no longer is: the prefilter now turns a repeat away cheaply, leaving
+	// the bookkeeping to cost more than the work it saved -- 38% of the peak
+	// memory on a plain-text run, for no time back.
 	for _, b := range blks {
-		err = l.lintBlock(f, b, lines, 0, needsLookup, done)
+		err = l.lintBlock(f, b, lines, 0, needsLookup)
 		if err != nil {
 			return err
 		}
@@ -294,35 +289,16 @@ func (l *Linter) lintTxt(f *core.File) error {
 
 func (l *Linter) lintLines(f *core.File) error {
 	block := nlp.NewBlock("", f.Content, "text"+l.metaScope+f.RealExt)
-	return l.lintBlock(f, block, len(f.Lines), 0, true, nil)
+	return l.lintBlock(f, block, len(f.Lines), 0, true)
 }
 
 // lintBlock runs every applicable rule over blk.
-//
-// `done` records the rules already run against a given text, so that blocks
-// which differ only in scope do not run the same rule over the same string
-// twice; pass nil when there is nothing to deduplicate against.
-func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool, done map[string]map[string]bool) error {
+func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool) error {
 	f.ChkToCtx = make(map[string]string)
 	for _, r := range l.inScopeFor(blk) {
 		name, chk := r.name, r.rule
 		if !l.shouldRun(name, f, chk) {
 			continue
-		}
-
-		if done != nil {
-			// Keyed by text and then by rule, so that a block's text is held
-			// once however many rules are asked about it. Keying by the pair
-			// stored another reference to the whole block per rule, which was
-			// most of what the linter allocated.
-			ran, seen := done[blk.Text]
-			if !seen {
-				ran = map[string]bool{}
-				done[blk.Text] = ran
-			} else if ran[name] {
-				continue
-			}
-			ran[name] = true
 		}
 
 		info := chk.Fields()
