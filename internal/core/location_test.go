@@ -105,7 +105,7 @@ func FuzzDirectPosition(f *testing.F) {
 	f.Add("_leading", "leading", 1)
 	f.Add("the toolkit’s plugin", "toolkit's", 4)
 	f.Add("the toolkit's plugin", "toolkit’s", 4)
-	f.Add("word word word", "word", 10)
+	f.Add("alpha beta alpha", "alpha", 11)
 	f.Add("@@@@@ word", "word", 6)
 	f.Add("`code` word", "word", 7)
 	f.Add("'_0ZaAZ _", "0ZaAZ", 2)

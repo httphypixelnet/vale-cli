@@ -16,11 +16,15 @@ func TestSpellFiltersMatchRegex(t *testing.T) {
 		"a1b2", "ABCd", "aBC", "aBCd", "HTTPServer", "getHTTPResponse",
 		"McDonald", "O'Brien", "e.g", "U.S.A", "ZZ", "aZ", "AaB", "AaBc",
 	}
+	// Coverage, not secrecy: these strings are fed to two implementations of
+	// the same filter to check they agree, so a predictable generator is all
+	// that is wanted -- and a fixed seed makes a failure reproducible.
+	rng := rand.New(rand.NewSource(1)) //nolint:gosec // not security-sensitive
 	for i := 0; i < 4000; i++ {
-		n := 1 + rand.Intn(12)
+		n := 1 + rng.Intn(12)
 		var b strings.Builder
 		for j := 0; j < n; j++ {
-			b.WriteByte(" aAzZ_'0-.é"[rand.Intn(11)])
+			b.WriteByte(" aAzZ_'0-.é"[rng.Intn(11)])
 		}
 		cases = append(cases, b.String())
 	}

@@ -181,22 +181,20 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 		base, from = at, 0
 	}
 
-	if !(base >= 0 && len(a.Span) > 0 && a.Span[0] >= 0) {
-	}
 	if base >= 0 && len(a.Span) > 0 && a.Span[0] >= 0 {
-		if idx := base + a.Span[0]; directPosition(ctx, idx, from, sub) {
+		if pos := base + a.Span[0]; directPosition(ctx, pos, from, sub) {
 			// The span the pattern would have reported, so that the inline-code
 			// test below sees what it sees: both `_` alternatives are consumed
 			// by the match rather than left beside it.
-			fs := []int{idx, idx + len(sub)}
-			if idx > 0 && ctx[idx-1] == '_' {
+			fs := []int{pos, pos + len(sub)}
+			if pos > 0 && ctx[pos-1] == '_' {
 				fs[0]--
 			}
 			if fs[1] < len(ctx) && ctx[fs[1]] == '_' {
 				fs[1]++
 			}
 			if !insideInlineMarkup(ctx, fs) {
-				return positionOf(ctx, idx, sub)
+				return positionOf(ctx, pos, sub)
 			}
 		}
 	}
