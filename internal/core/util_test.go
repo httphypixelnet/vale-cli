@@ -164,3 +164,21 @@ func TestShouldIgnoreDirectory(t *testing.T) {
 		})
 	}
 }
+
+func TestStyleName(t *testing.T) {
+	tests := map[string]string{
+		"proselint.Typography": "proselint",
+		"proselint":            "proselint",
+		"Vale.Spelling":        "Vale",
+		// A consistency check reports under a third part; the style is still
+		// the first one.
+		"demo.Consistency.Smart": "demo",
+		"":                       "",
+	}
+
+	for in, want := range tests {
+		if got := StyleName(in); got != want {
+			t.Errorf("StyleName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -155,6 +155,13 @@ Feature: Checks
             test2.md:11:6:Bugs.WrongExp:Use 'versus' instead of 'vs '.
             """
 
+    Scenario: A level given for a style
+        When I test "checks/StyleLevel"
+        Then the output should contain exactly:
+            """
+            test.md:1:16:demo.Spacing:'.W' should have one space
+            """
+
     Scenario: Sequence reaches every block
         When I test "checks/SequenceScopes"
         Then the output should contain exactly:

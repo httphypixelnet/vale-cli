@@ -151,3 +151,38 @@ func BenchmarkLintRST(b *testing.B) {
 func BenchmarkLintMD(b *testing.B) {
 	benchmarkLint(b, "../../testdata/fixtures/benchmarks/bench.md")
 }
+
+// A setting written for a rule takes precedence over one written for its
+// style, which is what lets a style-wide default be overridden rule by rule.
+func TestLookupPrefersTheRule(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings map[string]bool
+		want     bool
+		found    bool
+	}{
+		{"neither", map[string]bool{}, false, false},
+		{"style only", map[string]bool{"proselint": false}, false, true},
+		{"rule only", map[string]bool{"proselint.Very": true}, true, true},
+		{
+			"rule overrides style",
+			map[string]bool{"proselint": false, "proselint.Very": true},
+			true, true,
+		},
+		{
+			"rule overrides style, the other way",
+			map[string]bool{"proselint": true, "proselint.Very": false},
+			false, true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, found := lookup(tt.settings, "proselint.Very", "proselint")
+			if got != tt.want || found != tt.found {
+				t.Errorf("lookup = (%v, %v), want (%v, %v)",
+					got, found, tt.want, tt.found)
+			}
+		})
+	}
+}
