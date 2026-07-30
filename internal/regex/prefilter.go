@@ -91,10 +91,29 @@ func literals(re *syntax.Regexp) []string {
 			return literals(re.Sub[0])
 		}
 		return nil
+
+	case syntax.OpStar, syntax.OpQuest:
+		// Zero repetitions satisfy these, so nothing is guaranteed.
+		return nil
+
+	case syntax.OpCharClass, syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		// A set of alternatives, not a string to search for. Enumerating a
+		// class would produce a filter slower than the match it replaces.
+		return nil
+
+	case syntax.OpBeginLine, syntax.OpEndLine, syntax.OpBeginText,
+		syntax.OpEndText, syntax.OpWordBoundary, syntax.OpNoWordBoundary,
+		syntax.OpEmptyMatch:
+		// Assertions match a position rather than any text.
+		return nil
+
+	case syntax.OpNoMatch:
+		// Matches nothing, so the rule can never fire. Returning no filter
+		// leaves it to the engine rather than making this the one place that
+		// decides a rule is dead.
+		return nil
 	}
 
-	// OpStar, OpQuest, character classes, anchors and anything else: no
-	// literal is guaranteed.
 	return nil
 }
 
