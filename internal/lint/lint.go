@@ -276,7 +276,7 @@ func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int) error {
 	// across blocks stay correct because `consistency` accumulates a set, which
 	// a repeated append cannot change, and `occurrence` counts within the text
 	// it is given, which is identical or it would not be skipped.
-	done := map[string]bool{}
+	done := map[string]map[string]bool{}
 	for _, b := range blks {
 		err = l.lintBlock(f, b, lines, 0, needsLookup, done)
 		if err != nil {
@@ -302,7 +302,7 @@ func (l *Linter) lintLines(f *core.File) error {
 // `done` records the rules already run against a given text, so that blocks
 // which differ only in scope do not run the same rule over the same string
 // twice; pass nil when there is nothing to deduplicate against.
-func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool, done map[string]bool) error {
+func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool, done map[string]map[string]bool) error {
 	f.ChkToCtx = make(map[string]string)
 	for _, r := range l.inScopeFor(blk) {
 		name, chk := r.name, r.rule
@@ -311,11 +311,18 @@ func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup b
 		}
 
 		if done != nil {
-			key := name + "\x00" + blk.Text
-			if done[key] {
+			// Keyed by text and then by rule, so that a block's text is held
+			// once however many rules are asked about it. Keying by the pair
+			// stored another reference to the whole block per rule, which was
+			// most of what the linter allocated.
+			ran, seen := done[blk.Text]
+			if !seen {
+				ran = map[string]bool{}
+				done[blk.Text] = ran
+			} else if ran[name] {
 				continue
 			}
-			done[key] = true
+			ran[name] = true
 		}
 
 		info := chk.Fields()
