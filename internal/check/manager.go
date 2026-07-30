@@ -6,7 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"golang.org/x/exp/maps"
 
@@ -123,14 +125,91 @@ func (mgr *Manager) AssignNLP(f *core.File) nlp.Info {
 }
 
 func (mgr *Manager) addStyle(path string) error {
-	return system.Walk(path, func(fp string, info fs.FileInfo, err error) error {
+	// Compiling a rule is the expensive half of loading one -- parsing the
+	// YAML and, mostly, handing its patterns to the regular-expression engine,
+	// which for a case-insensitive pattern enumerates Unicode case folds. Done
+	// one rule at a time that is most of what Vale spends before it reads a
+	// byte of input, and the rules are independent of each other.
+	//
+	// So they are compiled in parallel and registered afterwards, in the order
+	// the walk found them. Registration touches shared state and stays serial;
+	// keeping it ordered means the rule that wins a name clash, and the error
+	// that gets reported first, do not depend on which goroutine finished
+	// first.
+	type source struct {
+		name, path string
+	}
+
+	var sources []source
+	err := system.Walk(path, func(fp string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
-		} else if info.IsDir() {
+		} else if info.IsDir() || !strings.HasSuffix(info.Name(), ".yml") {
 			return nil
 		}
-		return mgr.addRuleFromSource(info.Name(), fp)
+		sources = append(sources, source{name: info.Name(), path: fp})
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	type result struct {
+		chkName   string
+		rule      Rule
+		taggedPOS bool
+		err       error
+		skip      bool
+	}
+
+	results := make([]result, len(sources))
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+
+	for i, src := range sources {
+		style := filepath.Base(filepath.Dir(src.path))
+		chkName := style + "." + strings.Split(src.name, ".")[0]
+
+		// A rule already loaded under this name is not re-read: the first
+		// search path to define it wins, as before.
+		if _, ok := mgr.rules[chkName]; ok {
+			results[i] = result{skip: true}
+			continue
+		}
+		results[i].chkName = chkName
+
+		wg.Add(1)
+		go func(i int, path string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			data, rerr := os.ReadFile(path)
+			if rerr != nil {
+				results[i].err = core.NewE201FromPosition(rerr.Error(), path, 1)
+				return
+			}
+			results[i].rule, results[i].taggedPOS, results[i].err = mgr.compileCheck(
+				data, results[i].chkName, path)
+		}(i, src.path)
+	}
+	wg.Wait()
+
+	for i := range results {
+		if results[i].skip {
+			continue
+		}
+		if results[i].err != nil {
+			return results[i].err
+		}
+		if rerr := mgr.registerCheck(
+			results[i].chkName, results[i].rule, results[i].taggedPOS); rerr != nil {
+			return rerr
+		}
+	}
+
+	return nil
 }
 
 func (mgr *Manager) addRuleFromSource(name, path string) error {
@@ -152,10 +231,23 @@ func (mgr *Manager) addRuleFromSource(name, path string) error {
 }
 
 func (mgr *Manager) addCheck(file []byte, chkName, path string) error {
+	rule, taggedPOS, err := mgr.compileCheck(file, chkName, path)
+	if err != nil {
+		return err
+	}
+	return mgr.registerCheck(chkName, rule, taggedPOS)
+}
+
+// compileCheck turns a rule's source into a Rule.
+//
+// It reads mgr.Config but does not touch mgr's mutable state, so it is safe to
+// run concurrently for different rules. Everything that writes to the Manager
+// is in registerCheck.
+func (mgr *Manager) compileCheck(file []byte, chkName, path string) (Rule, bool, error) {
 	// Load the rule definition.
 	generic, err := parse(file, path)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 
 	// Set default values, if necessary.
@@ -173,19 +265,21 @@ func (mgr *Manager) addCheck(file []byte, chkName, path string) error {
 
 	rule, err := buildRule(mgr.Config, generic)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 
+	pos, ok := generic["pos"]
+	return rule, ok && pos != "", nil
+}
+
+// registerCheck records a compiled rule and what it implies for the run.
+func (mgr *Manager) registerCheck(chkName string, rule Rule, taggedPOS bool) error {
 	for _, s := range rule.Fields().Scope {
 		base := strings.Split(s, ".")[0]
 		mgr.scopes[base] = struct{}{}
 	}
 
-	if rule.Fields().Extends == "sequence" {
-		mgr.needsTagging = true
-	}
-
-	if pos, ok := generic["pos"]; ok && pos != "" {
+	if rule.Fields().Extends == "sequence" || taggedPOS {
 		mgr.needsTagging = true
 	}
 
