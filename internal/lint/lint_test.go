@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -151,6 +152,53 @@ func BenchmarkLintRST(b *testing.B) {
 
 func BenchmarkLintMD(b *testing.B) {
 	benchmarkLint(b, "../../testdata/fixtures/benchmarks/bench.md")
+}
+
+// generatedReference builds a document shaped like machine-written API
+// reference: many short blocks, each naming a symbol nothing else names.
+//
+// The shape matters more than the prose. Vale lints a passage once and reuses
+// the result, so a fixture built by repeating a file measures the cache rather
+// than the parser -- which is how a document that takes seconds in the wild can
+// look fast here. Unique identifiers defeat that, and they are what real
+// generated references contain.
+func generatedReference(size int) string {
+	var b strings.Builder
+	for i := 0; b.Len() < size; i++ {
+		fmt.Fprintf(&b, "### `Widget%dOptions`\n\n", i)
+		fmt.Fprintf(&b, "Options accepted by the widget%d endpoint. The retry\n", i)
+		fmt.Fprintf(&b, "field controls how often request%d is reissued.\n\n", i)
+		fmt.Fprintf(&b, "- `timeout%d` -- seconds to wait before giving up.\n", i)
+		fmt.Fprintf(&b, "- `retries%d` -- how many attempts to make.\n\n", i)
+	}
+	return b.String()
+}
+
+// BenchmarkLintGenerated lints one large file, which is where cost stops
+// tracking size.
+//
+// Real documentation sets contain these: an API reference nobody hand-writes,
+// hundreds of kilobytes in a single file. They are also where Vale is slowest
+// per byte -- searching for a block's position walks the document, so the work
+// grows with the square of the length. Sizes here bracket what shows up in
+// practice; the largest file in Airbyte's docs is 869 KB.
+//
+// Divide ns/op by the size: the cost per kilobyte should not climb.
+func BenchmarkLintGenerated(b *testing.B) {
+	dir := b.TempDir()
+	for _, kb := range []int{128, 512, 1024} {
+		doc := generatedReference(kb * 1024)
+
+		path := filepath.Join(dir, fmt.Sprintf("gen-%dkb.md", kb))
+		if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+			b.Fatal(err)
+		}
+
+		b.Run(fmt.Sprintf("%dKB", kb), func(b *testing.B) {
+			benchmarkLint(b, path)
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(kb), "ns/KB")
+		})
+	}
 }
 
 // BenchmarkLintMDScale lints one document truncated to a range of sizes.

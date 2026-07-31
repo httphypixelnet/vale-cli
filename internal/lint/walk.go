@@ -232,7 +232,26 @@ func (w *walker) locate(text string) int {
 		return -1
 	}
 
-	i := strings.Index(ctx[w.cursor:], text)
+	// Look a bounded distance ahead rather than to the end of the file.
+	//
+	// A block that will be found sits just past the cursor -- the gap is the
+	// markup between it and the previous block. A block that extraction has
+	// rewritten is not in the source at all, and scanning the rest of the
+	// document to discover that costs a pass per block: on an 870 KB generated
+	// reference, where every block is rewritten, this was the largest single
+	// cost in the run.
+	//
+	// The window only has to exceed the longest run of markup between two
+	// blocks. 64 KB is far past that, and a block beyond it takes the same
+	// search-based placement a miss has always taken.
+	const window = 64 << 10
+
+	hay := ctx[w.cursor:]
+	if len(hay) > window {
+		hay = hay[:window]
+	}
+
+	i := strings.Index(hay, text)
 	if i < 0 {
 		// Extraction can rewrite text -- stripping markup, decoding entities --
 		// leaving something that is not a substring of the source. Those blocks
