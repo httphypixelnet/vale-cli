@@ -29,6 +29,7 @@ lookarounds
 lua
 macOS
 markdata
+Mintlify
 mkdocs
 nonword
 npm
