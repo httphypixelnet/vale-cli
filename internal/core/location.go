@@ -270,9 +270,9 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 	// A quote-free match is a plain literal, so the first candidate can be
 	// found without running the engine over the whole context.
 	if !strings.ContainsAny(sub, `'"`) {
-		if at := literalFirst(ctx, sub); at >= 0 &&
-			!insideInlineMarkup(ctx, []int{at, at + len(sub)}) {
-			return positionOf(ctx, at, sub)
+		if lit := literalFirst(ctx, sub); lit >= 0 &&
+			!insideInlineMarkup(ctx, []int{lit, lit + len(sub)}) {
+			return positionOf(ctx, lit, sub)
 		}
 	}
 
