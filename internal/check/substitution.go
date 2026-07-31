@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"unicode"
 
 	"golang.org/x/exp/maps"
 
@@ -237,17 +239,139 @@ func literalSkeleton(pattern string) string {
 	return b.String()
 }
 
-// recaseToTerm re-cases observed to a vocab term's canonical form when the term
-// is a regex describing a single fixed-length spelling (e.g. `OAuth2?` against
-// `oauth2` yields `OAuth2`). It returns term unchanged when the pattern can't
-// be cleanly aligned, so the raw regex is only ever shown as a last resort.
-// See #997.
-func recaseToTerm(term, observed string) string {
-	skel := literalSkeleton(term)
-	if skel == "" || !strings.EqualFold(skel, observed) {
-		return term
+// Alternations multiply out fast; past a handful the term is no longer one
+// word spelled several ways.
+const maxExpansions = 64
+
+// expandPattern enumerates every spelling a vocab term can match -- `OAuth2?`
+// gives OAuth2 and OAuth -- or nil if the pattern is not a finite set.
+func expandPattern(pattern string) []string {
+	runes := []rune(pattern)
+
+	// parse reads an alternation at i, returning its spellings and the index
+	// just past what it consumed.
+	var parse func(i int, nested bool) (out []string, next int, ok bool)
+	parse = func(i int, nested bool) ([]string, int, bool) {
+		branches := []string{}  // completed alternatives
+		current := []string{""} // spellings of the branch being read
+
+		// cross appends every element of add to every spelling so far.
+		cross := func(add []string) bool {
+			if len(current)*len(add) > maxExpansions {
+				return false
+			}
+			next := make([]string, 0, len(current)*len(add))
+			for _, prefix := range current {
+				for _, suffix := range add {
+					next = append(next, prefix+suffix)
+				}
+			}
+			current = next
+			return true
+		}
+
+		for i < len(runes) {
+			var atom []string
+
+			switch r := runes[i]; r {
+			case ')':
+				if !nested {
+					return nil, 0, false // unbalanced
+				}
+				return append(branches, current...), i + 1, true
+			case '|':
+				branches = append(branches, current...)
+				current = []string{""}
+				i++
+				continue
+			case '(':
+				start := i + 1
+				// Capturing or not makes no difference to the spellings.
+				if strings.HasPrefix(string(runes[start:]), "?:") {
+					start += 2
+				} else if start < len(runes) && runes[start] == '?' {
+					return nil, 0, false // lookaround, named group, flags
+				}
+				inner, next, ok := parse(start, true)
+				if !ok {
+					return nil, 0, false
+				}
+				atom, i = inner, next
+			case '\\':
+				if i+1 >= len(runes) {
+					return nil, 0, false
+				}
+				// `\d`, `\w`, `\b` are not fixed spellings.
+				next := runes[i+1]
+				if unicode.IsLetter(next) || unicode.IsDigit(next) {
+					return nil, 0, false
+				}
+				atom = []string{string(next)}
+				i += 2
+			case '[', ']', '{', '}', '.', '*', '+', '^', '$':
+				return nil, 0, false
+			default:
+				atom = []string{string(r)}
+				i++
+			}
+
+			// `?` makes the atom optional: add the empty spelling too.
+			if i < len(runes) && runes[i] == '?' {
+				atom = append(append([]string{}, atom...), "")
+				i++
+			} else if i < len(runes) && (runes[i] == '*' || runes[i] == '+' || runes[i] == '{') {
+				return nil, 0, false
+			}
+
+			if !cross(atom) {
+				return nil, 0, false
+			}
+		}
+
+		if nested {
+			return nil, 0, false // unterminated group
+		}
+		return append(branches, current...), i, true
 	}
-	return skel
+
+	out, next, ok := parse(0, false)
+	if !ok || next != len(runes) || len(out) == 0 {
+		return nil
+	}
+
+	return out
+}
+
+// Computed once per term, not once per alert; a run can raise hundreds of
+// thousands against the same few terms.
+var expansions sync.Map // pattern -> []string
+
+func expansionsFor(term string) []string {
+	if cached, ok := expansions.Load(term); ok {
+		return cached.([]string)
+	}
+
+	out := expandPattern(term)
+	if out == nil {
+		if skel := literalSkeleton(term); skel != "" {
+			out = []string{skel}
+		}
+	}
+
+	expansions.Store(term, out)
+	return out
+}
+
+// recaseToTerm re-cases observed to a vocab term's canonical spelling, e.g.
+// `OAuth2?` against `Oauth` yields `OAuth`. It returns term unchanged when no
+// spelling matches, so the raw regex is only ever a last resort. See #997.
+func recaseToTerm(term, observed string) string {
+	for _, candidate := range expansionsFor(term) {
+		if strings.EqualFold(candidate, observed) {
+			return candidate
+		}
+	}
+	return term
 }
 
 func convertMessage(s string) string {

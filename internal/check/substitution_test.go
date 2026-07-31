@@ -1,6 +1,9 @@
 package check
 
 import (
+	"slices"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -164,18 +167,89 @@ func TestRecaseToTerm(t *testing.T) {
 	cases := []struct {
 		term, observed, want string
 	}{
-		{"OAuth2?", "oauth2", "OAuth2"},       // optional char present
-		{"OpenAPI", "openapi", "OpenAPI"},     // plain literal
-		{`Wi\-?Fi`, "wi-fi", "Wi-Fi"},         // escaped literal hyphen, aligned
-		{"Wi-?Fi", "wifi", "Wi-?Fi"},          // optional char absent -> fall back
-		{"[Pp]ython", "python", "[Pp]ython"},  // class -> fall back
-		{"(?:foo|bar)", "foo", "(?:foo|bar)"}, // group/alternation -> fall back
+		{"OAuth2?", "oauth2", "OAuth2"},                  // optional char present
+		{"OAuth2?", "Oauth", "OAuth"},                    // optional char absent -- see #997
+		{"OpenAPI", "openapi", "OpenAPI"},                // plain literal
+		{`Wi\-?Fi`, "wi-fi", "Wi-Fi"},                    // escaped literal hyphen
+		{"Wi-?Fi", "wifi", "WiFi"},                       // optional char absent
+		{"Docker(file|ize)", "dockerfile", "Dockerfile"}, // alternation -- see #997
+		{"Docker(file|ize)", "DOCKERIZE", "Dockerize"},
+		{"(?:foo|bar)", "foo", "foo"}, // non-capturing group
+
+		// No spelling in the set matches, so the term stands.
+		{"Docker(file|ize)", "docker", "Docker(file|ize)"},
+
+		// Not a finite set of spellings: nothing to name.
+		{"[Pp]ython", "python", "[Pp]ython"},
+		{`Py.*\b`, "pythonic", `Py.*\b`},
+		{"Go+gle", "google", "Go+gle"},
 	}
 	for _, c := range cases {
 		if got := recaseToTerm(c.term, c.observed); got != c.want {
 			t.Errorf("recaseToTerm(%q, %q) = %q, want %q", c.term, c.observed, got, c.want)
 		}
 	}
+}
+
+func TestExpandPattern(t *testing.T) {
+	cases := []struct {
+		pattern string
+		want    []string
+	}{
+		{"OAuth", []string{"OAuth"}},
+		{"OAuth2?", []string{"OAuth2", "OAuth"}},
+		{"Docker(file|ize)", []string{"Dockerfile", "Dockerize"}},
+		{"Docker(?:file|ize)", []string{"Dockerfile", "Dockerize"}},
+		{"foo|bar", []string{"foo", "bar"}},
+		{`Wi\-Fi`, []string{"Wi-Fi"}},
+		{"a(b|c)d?", []string{"abd", "ab", "acd", "ac"}},
+
+		// Optional group: the whole group drops out.
+		{"Java(Script)?", []string{"JavaScript", "Java"}},
+
+		// Unbounded or class-based -- no finite set of spellings.
+		{"[Pp]ython", nil},
+		{"Go+gle", nil},
+		{"Py.*", nil},
+		{`\d+`, nil},
+		{"a{2,3}", nil},
+		{"(unclosed", nil},
+		{"unopened)", nil},
+		{"(?=lookahead)", nil},
+	}
+
+	for _, c := range cases {
+		got := expandPattern(c.pattern)
+		if c.want == nil {
+			if got != nil {
+				t.Errorf("expandPattern(%q) = %v, want nil", c.pattern, got)
+			}
+			continue
+		}
+		if !slices.Equal(sorted(got), sorted(c.want)) {
+			t.Errorf("expandPattern(%q) = %v, want %v", c.pattern, got, c.want)
+		}
+	}
+}
+
+// A blown budget has to return nil rather than a truncated set: a partial list
+// would let recaseToTerm miss the spelling the writer actually used and report
+// the raw pattern, which is the bug this exists to avoid.
+func TestExpandPatternBudget(t *testing.T) {
+	// 2^7 = 128 spellings, past maxExpansions.
+	if got := expandPattern(strings.Repeat("(a|b)", 7)); got != nil {
+		t.Errorf("expected nil past the budget, got %d spellings", len(got))
+	}
+	// 2^5 = 32, inside it.
+	if got := expandPattern(strings.Repeat("(a|b)", 5)); len(got) != 32 {
+		t.Errorf("expected 32 spellings, got %d", len(got))
+	}
+}
+
+func sorted(s []string) []string {
+	out := append([]string{}, s...)
+	sort.Strings(out)
+	return out
 }
 
 func TestOptions(t *testing.T) {
