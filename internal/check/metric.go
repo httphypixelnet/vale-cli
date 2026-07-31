@@ -2,11 +2,13 @@ package check
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/d5/tengo/v2"
+	"github.com/d5/tengo/v2/parser"
 	"github.com/d5/tengo/v2/stdlib"
 
 	"github.com/errata-ai/vale/v3/internal/core"
@@ -50,7 +52,12 @@ func NewMetric(_ *core.Config, generic baseCheck, path string) (Metric, error) {
 // Run calculates the readability level of the given text.
 func (o Metric) Run(_ nlp.Block, f *core.File, _ *core.Config) ([]core.Alert, error) {
 	alerts := []core.Alert{}
-	ctx := context.Background()
+
+	// A formula is compiled and run as a Tengo program, so it needs the same
+	// deadline a script rule gets; see tengoTimeout. Both evalMath calls share
+	// it, which bounds the rule as a whole rather than each half of it.
+	ctx, cancel := context.WithTimeout(context.Background(), tengoTimeout)
+	defer cancel()
 
 	parameters, err := f.ComputeMetrics()
 	if err != nil {
@@ -73,7 +80,8 @@ func (o Metric) Run(_ nlp.Block, f *core.File, _ *core.Config) ([]core.Alert, er
 	// We need this to allow showing the result in a rule's message.
 	res, err := evalMath(ctx, o.Formula, parameters)
 	if err != nil {
-		return alerts, core.NewE201FromTarget(err.Error(), "formula", o.path)
+		return alerts, ruleError(
+			o.Name, "formula", o.path, err, errors.Is(ctx.Err(), context.DeadlineExceeded))
 	}
 
 	// The binary result of our formula:
@@ -81,7 +89,8 @@ func (o Metric) Run(_ nlp.Block, f *core.File, _ *core.Config) ([]core.Alert, er
 
 	match, err := evalMath(ctx, eqb, parameters)
 	if err != nil {
-		return alerts, core.NewE201FromTarget(err.Error(), "condition", o.path)
+		return alerts, ruleError(
+			o.Name, "condition", o.path, err, errors.Is(ctx.Err(), context.DeadlineExceeded))
 	}
 
 	if match.(bool) {
@@ -105,6 +114,40 @@ func (o Metric) Pattern() string {
 	return o.Formula
 }
 
+// checkExpression rejects anything that is not a single expression.
+//
+// A rule's formula is pasted into a Tengo program by boilerplate above, and
+// `%s` escapes nothing. A formula that closes the parenthesis it was handed can
+// therefore append statements of its own, which turns a `metric` rule -- meant
+// to be arithmetic over a document's counts -- into arbitrary code running in
+// the same VM a `script` rule gets. `0); for { } ; x := (0` is the whole exploit,
+// and the same applies to `condition`, which is spliced after a number.
+//
+// Parsing the formula on its own settles it. An injection cannot survive the
+// trip: the `)` it depends on has no opener until the boilerplate supplies one,
+// so it fails to parse here, where it is still just a string.
+func checkExpression(expr string) error {
+	fileSet := parser.NewFileSet()
+	srcFile := fileSet.AddFile("expression", -1, len(expr))
+
+	parsed, err := parser.NewParser(srcFile, []byte(expr), nil).ParseFile()
+	if err != nil {
+		return fmt.Errorf("invalid expression %q: %w", expr, err)
+	}
+
+	if len(parsed.Stmts) != 1 {
+		return fmt.Errorf(
+			"expected a single expression, found %d statements in %q",
+			len(parsed.Stmts), expr)
+	}
+	if _, ok := parsed.Stmts[0].(*parser.ExprStmt); !ok {
+		return fmt.Errorf(
+			"expected an expression, found %T in %q", parsed.Stmts[0], expr)
+	}
+
+	return nil
+}
+
 func evalMath(
 	ctx context.Context,
 	expr string,
@@ -113,6 +156,10 @@ func evalMath(
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, fmt.Errorf("empty expression")
+	}
+
+	if err := checkExpression(expr); err != nil {
+		return nil, err
 	}
 
 	script := tengo.NewScript([]byte(fmt.Sprintf(boilerplate, expr)))

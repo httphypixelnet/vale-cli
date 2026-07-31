@@ -1,8 +1,12 @@
 package check
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/d5/tengo/v2"
 	"github.com/d5/tengo/v2/stdlib"
@@ -10,6 +14,44 @@ import (
 	"github.com/errata-ai/vale/v3/internal/core"
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
+
+// tengoTimeout bounds one execution of a rule's embedded program, for both the
+// `script` rules below and the `metric` formulas beside them.
+//
+// These are the two checks whose body is arbitrary code, and both usually
+// arrive inside a downloaded style package rather than being written by the
+// person running Vale. Restricting the imports -- see NewScript -- stops such a
+// program reaching the filesystem or the network, but says nothing about how
+// long it may take, and `for {}` compiles as readily as anything else. Without
+// a deadline that hangs Vale with no output and no error, which in CI looks
+// like the tool having crashed rather than a rule misbehaving.
+//
+// Generous on purpose: a script matches against a single block and a formula
+// evaluates once per file, so this sits orders of magnitude above what a
+// working rule needs and only a runaway one should ever reach it.
+const tengoTimeout = 2 * time.Second
+
+// ruleError reports a rule's runtime failure against the rule itself.
+//
+// The path alone identifies the file but not which check inside it stopped, and
+// a package may define several. The name is what appears in a rule's output and
+// in a user's config, so it is the handle they already have for switching the
+// thing off.
+//
+// A deadline is also restated: `context deadline exceeded` is Go's wording for
+// an internal mechanism, and a style author reading it has no reason to connect
+// it to a rule of theirs that never returns.
+func ruleError(name, field, path string, err error, timedOut bool) error {
+	msg := err.Error()
+	if timedOut {
+		msg = fmt.Sprintf("did not finish within %s", tengoTimeout)
+	}
+	if name != "" {
+		msg = name + ": " + msg
+	}
+
+	return core.NewE201FromTarget(msg, field, path)
+}
 
 // Script is Tango-based script.
 //
@@ -85,8 +127,12 @@ func (s Script) Run(blk nlp.Block, _ *core.File, _ *core.Config) ([]core.Alert, 
 		return alerts, core.NewE201FromTarget(err.Error(), "script", s.path)
 	}
 
-	if err := compiled.Run(); err != nil {
-		return alerts, core.NewE201FromTarget(err.Error(), "script", s.path)
+	ctx, cancel := context.WithTimeout(context.Background(), tengoTimeout)
+	defer cancel()
+
+	if err := compiled.RunContext(ctx); err != nil {
+		return alerts, ruleError(
+			s.Name, "script", s.path, err, errors.Is(ctx.Err(), context.DeadlineExceeded))
 	}
 
 	for _, match := range parseMatches(compiled.Get("matches").Array()) {
