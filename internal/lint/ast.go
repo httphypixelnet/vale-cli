@@ -257,7 +257,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			txt = strings.TrimLeft(txt, " ")
 			shift -= len(txt)
 
-			b := state.block(txt, withClasses(scope, state)+l.metaScope+f.RealExt)
+			b := state.block(txt, withClasses(scope, state)+f.MetaScope+f.RealExt)
 
 			// Prose, not just a block: a list item or a heading is made of
 			// sentences the same way a paragraph is, and only this path segments
@@ -283,7 +283,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 
 	f.Summary.WriteString(txt + "\n\n")
 
-	b := state.block(txt, withClasses("text", state)+l.metaScope+f.RealExt)
+	b := state.block(txt, withClasses("text", state)+f.MetaScope+f.RealExt)
 	if err := l.lintProse(f, b, state.lines); err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (l *Linter) lintInline(f *core.File, state *walker, blk nlp.Block, lines, s
 		}
 
 		b := nlp.NewLinedBlock(
-			blk.Context, cap.text, cap.scope+l.metaScope+f.RealExt, blk.Line)
+			blk.Context, cap.text, cap.scope+f.MetaScope+f.RealExt, blk.Line)
 		b.Offset = at
 
 		// Without an offset the match has to be located by searching, which is

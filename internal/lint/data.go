@@ -30,16 +30,12 @@ func (l *Linter) lintData(f *core.File) error {
 
 func (l *Linter) lintScopedValues(f *core.File, values []core.ScopedValues) error {
 	var err error
-	// We want to set up our processing servers as if we were dealing with
-	// a directory since we likely have many fragments to convert.
-	l.HasDir = true
-
 	wholeFile := f.Content
 	srcLines := strings.Split(wholeFile, "\n")
 	last := 0
 
 	for _, match := range values {
-		l.SetMetaScope(match.Scope)
+		f.SetMetaScope(match.Scope)
 
 		seen := make(map[string]int)
 		for _, sv := range match.Values {

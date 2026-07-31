@@ -76,10 +76,6 @@ func commentPadding(comment code.Comment, line int, source string, lang *code.La
 }
 
 func (l *Linter) lintFragments(f *core.File) error {
-	// We want to set up our processing servers as if we were dealing with
-	// a directory since we likely have many fragments to convert.
-	l.HasDir = true
-
 	lang, err := code.GetLanguageFromExt(f.RealExt)
 	if err != nil {
 		return err
@@ -99,7 +95,7 @@ func (l *Linter) lintFragments(f *core.File) error {
 
 	last := 0
 	for _, comment := range comments {
-		l.SetMetaScope(comment.Scope)
+		f.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
 		switch f.NormedExt {

@@ -56,7 +56,6 @@ func doLint(args []string, l *lint.Linter, glob string) ([]*core.File, error) {
 					fmt.Errorf("argument '%s' does not exist", file),
 				)
 			}
-			l.HasDir = status == 0
 			input = append(input, file)
 		}
 		linted, err = l.Lint(input, glob)

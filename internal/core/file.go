@@ -50,6 +50,7 @@ type File struct {
 	lineIdxCtx string                     // the context lineIdx was built from
 	simple     bool                       // -
 	Lookup     bool                       // -
+	MetaScope  string                     // extra scope context, e.g. a YAML key or comment
 }
 
 // lineStarts returns the byte offset at which each line of ctx begins.
@@ -491,5 +492,16 @@ func (f *File) ResetComments() {
 		if check != "off" {
 			f.Comments[check] = false
 		}
+	}
+}
+
+// SetMetaScope sets an optional scope appended to each check's scope, giving
+// it extra context. It lives on the file because files are linted
+// concurrently.
+func (f *File) SetMetaScope(scope string) {
+	if scope != "" {
+		f.MetaScope = "." + scope
+	} else {
+		f.MetaScope = ""
 	}
 }

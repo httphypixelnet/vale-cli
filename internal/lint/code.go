@@ -51,7 +51,7 @@ func (l *Linter) lintCode(f *core.File) error {
 
 	last := 0
 	for _, comment := range comments {
-		l.SetMetaScope(comment.Scope)
+		f.SetMetaScope(comment.Scope)
 		if core.StringInSlice("comment", ignored) {
 			continue
 		} else if core.StringInSlice(comment.Scope, ignored) {
