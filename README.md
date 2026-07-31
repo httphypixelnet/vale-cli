@@ -29,6 +29,12 @@
 
 > Hi there! I'm [@jdkato](https://github.com/jdkato), the sole developer of Vale. If you'd like to help me dedicate more time to _developing_, _documenting_, and _supporting_ Vale, feel free to donate through [GitHub Sponsors](https://github.com/sponsors/jdkato) or [Open Collective](https://opencollective.com/vale). Any donation&mdash;big, small, one-time, or recurring&mdash;is greatly appreciated!
 
+### Spotlights
+
+> Sponsors at $1,000 and above get a dedicated page on [vale.sh](https://vale.sh).
+
+- [**Mintlify**](https://vale.sh/sponsors/mintlify) &mdash; an AI-native documentation platform built for developers.
+
 ### Organizations
 
 <a href="https://opencollective.com/vale"><img src="https://opencollective.com/vale/organizations.svg?width=890"></a>
