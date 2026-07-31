@@ -33,10 +33,8 @@ func compileScript(t *testing.T, src string) *tengo.Compiled {
 	return compiled
 }
 
-// A script rule is the only check whose body is arbitrary code, and it usually
-// arrives inside a downloaded style package. Denying it the `os` module bounds
-// what it can reach; this bounds how long it can take. Without the deadline
-// this test does not fail, it hangs.
+// A rule that never returns is reported rather than left to run. Without the
+// deadline this test does not fail, it hangs.
 func TestScriptRunStopsAtTheTimeout(t *testing.T) {
 	s := Script{
 		compiled: compileScript(t, "matches := []\nfor { }"),
@@ -55,10 +53,8 @@ func TestScriptRunStopsAtTheTimeout(t *testing.T) {
 	}
 }
 
-// A rule that runs away has to say which rule it was: the file may hold
-// several checks, and the name is the handle a user has for switching one off.
-// The deadline is restated for the same reason -- Go's own wording for it names
-// a mechanism the reader has never heard of.
+// The report has to name the rule: a file may hold several checks, and the name
+// is the handle a user already has for finding and changing one.
 func TestScriptRunTimeoutNamesTheRule(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "Runaway.yml")

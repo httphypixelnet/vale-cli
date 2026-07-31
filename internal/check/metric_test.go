@@ -7,28 +7,28 @@ import (
 	"time"
 )
 
-// A metric's formula is pasted into a Tengo program, so a formula that closes
-// the parenthesis it is handed can append statements and get the whole VM. The
-// timeout bounds how long that costs; this is what stops it being possible.
-func TestEvalMathRejectsInjectedStatements(t *testing.T) {
-	injections := []string{
-		// Closes the boilerplate's parenthesis, loops, reopens it.
+// A formula is substituted into the boilerplate, so one carrying its own
+// parentheses could read as several statements. Only a single expression is a
+// formula this rule can evaluate.
+func TestEvalMathRejectsNonExpressions(t *testing.T) {
+	notExpressions := []string{
+		// Closes the substitution's parenthesis and reopens it, so what
+		// arrives is three statements rather than one expression.
 		"0); for { } ; x := (0",
-		// The same shape without the loop: still two statements smuggled in.
 		"0); x := 1; y := (0",
-		// A bare statement rather than an expression.
+		// A statement rather than an expression.
 		"x := 1",
 	}
 
-	for _, expr := range injections {
+	for _, expr := range notExpressions {
 		t.Run(expr, func(t *testing.T) {
 			_, err := evalMath(context.Background(), expr, map[string]interface{}{})
 			if err == nil {
 				t.Fatalf("%q was accepted", expr)
 			}
 			if strings.Contains(err.Error(), "deadline") {
-				t.Errorf("%q ran and was stopped by the timeout; it should not "+
-					"have compiled: %v", expr, err)
+				t.Errorf("%q was evaluated and then timed out; it should have "+
+					"been refused before that: %v", expr, err)
 			}
 		})
 	}
@@ -60,8 +60,8 @@ func TestEvalMathAcceptsRealFormulas(t *testing.T) {
 	}
 }
 
-// `condition` is spliced in after the computed value, so it is the same hole
-// by another route and has to be closed by the same check.
+// `condition` is substituted the same way, after the computed value, so it
+// needs the same check.
 func TestEvalMathGuardsTheConditionPath(t *testing.T) {
 	// What Metric.Run builds: the result, then the rule's condition.
 	good := "12.500000 > 10"
@@ -72,15 +72,15 @@ func TestEvalMathGuardsTheConditionPath(t *testing.T) {
 	bad := "12.500000 > 0); for { } ; x := (0"
 	_, err := evalMath(context.Background(), bad, map[string]interface{}{})
 	if err == nil {
-		t.Fatal("an injected condition was accepted")
+		t.Fatal("a condition that is not a single expression was accepted")
 	}
 	if strings.Contains(err.Error(), "deadline") {
-		t.Errorf("the injected condition ran: %v", err)
+		t.Errorf("the condition was evaluated rather than refused: %v", err)
 	}
 }
 
-// Rejection has to happen before execution, not by running the program and
-// waiting for the deadline: a formula stopped by the timeout still ran.
+// The check has to happen before evaluation. A formula stopped by the deadline
+// was still evaluated, which is a slower answer and a worse message.
 func TestEvalMathRejectsWithoutRunning(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), tengoTimeout)
 	defer cancel()
@@ -91,7 +91,7 @@ func TestEvalMathRejectsWithoutRunning(t *testing.T) {
 	}
 
 	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("took %s, so it was executed and timed out rather than refused",
+		t.Errorf("took %s, so it was evaluated and timed out rather than refused",
 			elapsed)
 	}
 }

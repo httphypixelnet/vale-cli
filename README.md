@@ -1,4 +1,4 @@
-# Vale: Your style, our editor [![Test](https://github.com/vale-cli/vale/actions/workflows/test.yml/badge.svg?branch=v3)](https://github.com/vale-cli/vale/actions/workflows/test.yml) [![GitHub All Releases](https://img.shields.io/github/downloads/errata-ai/vale/total?logo=GitHub&color=ff69b4)](https://github.com/errata-ai/vale/releases) [![Docker Pulls](https://img.shields.io/docker/pulls/jdkato/vale?color=orange&logo=docker&logoColor=white)](https://hub.docker.com/r/jdkato/vale) [![Chocolatey](https://img.shields.io/chocolatey/dt/vale?color=white&label=chocolatey&logo=chocolatey)](https://community.chocolatey.org/packages/vale) [![Homebrew](https://img.shields.io/homebrew/installs/dy/vale?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/vale) [![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Vale%20Guru-006BFF)](https://gurubase.io/g/vale)
+# Vale: Your style, our editor [![Test](https://github.com/vale-cli/vale/actions/workflows/test.yml/badge.svg?branch=v3)](https://github.com/vale-cli/vale/actions/workflows/test.yml) [![GitHub All Releases](https://img.shields.io/github/downloads/vale-cli/vale/total?logo=GitHub&color=ff69b4)](https://github.com/vale-cli/vale/releases) [![Docker Pulls](https://img.shields.io/docker/pulls/jdkato/vale?color=orange&logo=docker&logoColor=white)](https://hub.docker.com/r/jdkato/vale) [![Chocolatey](https://img.shields.io/chocolatey/dt/vale?color=white&label=chocolatey&logo=chocolatey)](https://community.chocolatey.org/packages/vale) [![Homebrew](https://img.shields.io/homebrew/installs/dy/vale?color=yellow&label=homebrew&logo=homebrew)](https://formulae.brew.sh/formula/vale) [![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Vale%20Guru-006BFF)](https://gurubase.io/g/vale)
 
 <p align="center">
   <b>Vale</b> is a command-line tool that brings code-like linting to prose. It's <b><a href="#mag-at-a-glance-vale-vs-">fast</a></b>, <b>cross-platform</b> (Windows, macOS, and Linux), and <b>highly customizable</b>.
@@ -14,9 +14,9 @@
 <tr>
 <th><a href="https://docs.vale.sh/topics/installation">Docs</a></th>
 <th><a href="https://studio.vale.sh/">Vale Studio</a></th>
-<th><a href="https://vale.sh/hub/">Package Hub</a></th>
-<th><a href="https://vale.sh/explorer/">Rule Explorer</a></th>
-<th><a href="https://vale.sh/generator/">Config Generator</a></th>
+<th><a href="https://vale.sh/explorer">Package Explorer</a></th>
+<th><a href="https://vale.sh/generator">Config Generator</a></th>
+<th><a href="https://cms.vale.sh">Vale CMS</a></th>
 </tr>
 </thead>
 </table>
@@ -55,9 +55,9 @@
 
 ## :boom: Key Features
 
-- [x] **Support for markup**: Vale has a rich understanding of many [markup formats](https://vale.sh/docs/topics/scoping/#formats), allowing it to avoid syntax-related false positives and intelligently exclude code snippets from prose-related rules.
+- [x] **Support for markup**: Vale has a rich understanding of many [markup formats](https://docs.vale.sh/formats), allowing it to avoid syntax-related false positives and intelligently exclude code snippets from prose-related rules.
 
-- [x] A **highly customizable** [extension system](https://vale.sh/docs/topics/styles/): Vale is capable of enforcing _your style_&mdash;be it a standard [editorial style guide](https://github.com/errata-ai/styles#available-styles) or a custom in-house set of rules (see [examples][6]).
+- [x] A **highly customizable** [extension system](https://docs.vale.sh/topics/styles): Vale is capable of enforcing _your style_&mdash;be it a standard [editorial style guide](https://vale.sh/explorer) or a custom in-house set of rules (see [examples][6]).
 
 - [x] **Easy-to-install**, stand-alone binaries: Unlike other tools, Vale doesn't require you to install and configure a particular programming language and its related tooling (such as Python/pip or Node.js/npm).
 
@@ -138,9 +138,6 @@ The corpus IDs in the above plots&mdash;`gitlab` and `ydkjs`&mdash;correspond to
 
 [1]: https://www.digitalocean.com/open-source/credits-for-projects
 [2]: https://studio.vale.sh/
-[3]: https://appwrite.io/oss-fund
-[4]: https://appwrite.io/
-[5]: https://page.famewall.io/vale
-[6]: https://vale.sh/#users
+[6]: https://vale.sh/#adopters
 [7]: https://gitlab.com/gitlab-org/gitlab/-/tree/7d6a4025a0346f1f50d2825c85742e5a27b39a8b/doc
 [8]: https://raw.githubusercontent.com/getify/You-Dont-Know-JS/1st-ed/es6%20%26%20beyond/ch2.md

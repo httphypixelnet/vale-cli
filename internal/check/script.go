@@ -15,20 +15,15 @@ import (
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
-// tengoTimeout bounds one execution of a rule's embedded program, for both the
-// `script` rules below and the `metric` formulas beside them.
+// tengoTimeout bounds one execution of a rule's program, for both the `script`
+// rules below and the `metric` formulas beside them.
 //
-// These are the two checks whose body is arbitrary code, and both usually
-// arrive inside a downloaded style package rather than being written by the
-// person running Vale. Restricting the imports -- see NewScript -- stops such a
-// program reaching the filesystem or the network, but says nothing about how
-// long it may take, and `for {}` compiles as readily as anything else. Without
-// a deadline that hangs Vale with no output and no error, which in CI looks
-// like the tool having crashed rather than a rule misbehaving.
+// A rule that loops without a way out would otherwise stop Vale with no output
+// and no error, which reads as the tool having crashed rather than as one rule
+// needing attention. Ending the run reports it instead.
 //
 // Generous on purpose: a script matches against a single block and a formula
-// evaluates once per file, so this sits orders of magnitude above what a
-// working rule needs and only a runaway one should ever reach it.
+// evaluates once per file, so this sits well above what a working rule needs.
 const tengoTimeout = 2 * time.Second
 
 // ruleError reports a rule's runtime failure against the rule itself.

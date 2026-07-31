@@ -116,16 +116,14 @@ func (o Metric) Pattern() string {
 
 // checkExpression rejects anything that is not a single expression.
 //
-// A rule's formula is pasted into a Tengo program by boilerplate above, and
-// `%s` escapes nothing. A formula that closes the parenthesis it was handed can
-// therefore append statements of its own, which turns a `metric` rule -- meant
-// to be arithmetic over a document's counts -- into arbitrary code running in
-// the same VM a `script` rule gets. `0); for { } ; x := (0` is the whole exploit,
-// and the same applies to `condition`, which is spliced after a number.
+// A formula is placed into the boilerplate above by substitution, so a value
+// carrying its own parentheses could parse as several statements rather than
+// the one it is meant to be. `condition` is substituted the same way, after the
+// computed value, and needs the same check.
 //
-// Parsing the formula on its own settles it. An injection cannot survive the
-// trip: the `)` it depends on has no opener until the boilerplate supplies one,
-// so it fails to parse here, where it is still just a string.
+// Parsing the value on its own settles what it is while it is still a string:
+// anything that is not exactly one expression is a formula this rule cannot
+// evaluate, and saying so here gives a better error than compiling it would.
 func checkExpression(expr string) error {
 	fileSet := parser.NewFileSet()
 	srcFile := fileSet.AddFile("expression", -1, len(expr))
