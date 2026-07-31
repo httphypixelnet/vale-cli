@@ -27,6 +27,16 @@ type Linter struct {
 	nonGlobal bool
 	metaScope string
 
+	// adoc holds the Asciidoctor processes this run is using, and adocOnce
+	// starts them the first time an AsciiDoc file is seen.
+	//
+	// These belong to the Linter rather than to the package: a long-lived
+	// caller -- the language server, or anything embedding Vale -- lints many
+	// times in one process, and a pool with no owner is a pool nothing ever
+	// stops.
+	adoc     *adocPool
+	adocOnce sync.Once
+
 	// inScope lists the rules whose scope matches a given block scope, keyed by
 	// the block's scope and parent.
 	//
@@ -111,6 +121,11 @@ func (l *Linter) Lint(input []string, pat string) ([]*core.File, error) {
 	}
 
 	l.glob = &gp
+
+	// Whatever external processes this run starts, it also stops. Lint may be
+	// called again on the same Linter, so the next run starts its own.
+	defer l.stopExternal()
+
 	for _, src := range input {
 		filesChan, errChan := l.lintFiles(done, src)
 
@@ -432,4 +447,13 @@ func (l *Linter) skip(old string) bool {
 	}
 
 	return false
+}
+
+// stopExternal shuts down the helper processes a run started.
+func (l *Linter) stopExternal() {
+	if l.adoc != nil {
+		l.adoc.stop()
+		l.adoc = nil
+		l.adocOnce = sync.Once{}
+	}
 }
