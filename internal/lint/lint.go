@@ -41,6 +41,10 @@ type Linter struct {
 	mdx     *procPool
 	mdxOnce sync.Once
 
+	// rst is the same arrangement for Docutils.
+	rst     *procPool
+	rstOnce sync.Once
+
 	// inScope lists the rules whose scope matches a given block scope, keyed by
 	// the block's scope and parent.
 	//
@@ -464,5 +468,10 @@ func (l *Linter) stopExternal() {
 		l.mdx.stop()
 		l.mdx = nil
 		l.mdxOnce = sync.Once{}
+	}
+	if l.rst != nil {
+		l.rst.stop()
+		l.rst = nil
+		l.rstOnce = sync.Once{}
 	}
 }
