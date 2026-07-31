@@ -306,21 +306,55 @@ func (w *walker) replaceToks(tok html.Token) {
 	}
 }
 
+// advance reports the line `text` sits on, or -1 if that is not ahead of the
+// line we are already on.
+//
+// Only the last line of `text` decides the result. The loop this replaced ran
+// a search for every line, and then for every word of any line that missed,
+// but each pass overwrote the previous one -- so every search but the final
+// one was computed and discarded. On a 118 KB file that made this function a
+// fifth of the whole run.
+//
+// The remaining search still starts at the beginning of the document, so cost
+// still grows faster than length. Three ways out were tried and measured:
+//
+//   - Skipping the masked prefix. `sub` overwrites consumed text with '@', but
+//     never touches the markup around it, so the first unmasked byte is the
+//     '#' of the first heading and the watermark cannot move.
+//   - Resuming from the previous match. Extraction rewrites text often enough
+//     that the forward search misses, and the fallback made the common path
+//     two scans instead of one: 47% slower at 112 KB.
+//   - Taking the line from the offset `locate` already found. This does remove
+//     the search -- string matching drops from 30% of the profile to 4% -- but
+//     `locate` gives where a block *starts* and this gives where it *ends*, and
+//     the change to blk.Line makes alert placement in core.assignLoc do much
+//     more work: 38% slower overall. Worth revisiting with assignLoc rather
+//     than on its own; the two are coupled.
+//
+// That last attempt did surface a real defect: with the line taken from the
+// offset, an rst alert moved from 56:19 -- inside a literal block -- to 43:45,
+// the prose it actually belongs to. `testdata/features/frontmatter.feature`
+// still encodes the wrong position, and core.assignLoc has a standing NOTE
+// saying blk.Line is untrustworthy. Both are the same bug.
 func (w *walker) advance(text string) int {
-	pos := 0
 	ctx := w.getCtx()
 
-	for _, s := range strings.Split(text, "\n") {
-		pos = strings.Index(ctx, s)
-		if pos < 0 {
-			for _, ss := range strings.Fields(s) {
-				pos = strings.Index(ctx, ss)
-			}
+	last := text
+	if i := strings.LastIndexByte(text, '\n'); i >= 0 {
+		last = text[i+1:]
+	}
+
+	pos := strings.Index(ctx, last)
+	if pos < 0 {
+		// Extraction rewrites text, so a line is not always a substring of the
+		// source; a single word from it usually still is.
+		if fields := strings.Fields(last); len(fields) > 0 {
+			pos = strings.Index(ctx, fields[len(fields)-1])
 		}
 	}
+
 	if pos >= 0 {
-		l := strings.Count(ctx[:pos], "\n")
-		if l > w.idx {
+		if l := strings.Count(ctx[:pos], "\n"); l > w.idx {
 			return l
 		}
 	}

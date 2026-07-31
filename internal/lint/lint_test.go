@@ -2,6 +2,7 @@ package lint
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -150,6 +151,57 @@ func BenchmarkLintRST(b *testing.B) {
 
 func BenchmarkLintMD(b *testing.B) {
 	benchmarkLint(b, "../../testdata/fixtures/benchmarks/bench.md")
+}
+
+// BenchmarkLintMDScale lints one document truncated to a range of sizes.
+//
+// Linting cost should track the amount of prose: double the file, double the
+// time. This benchmark exists because it does not. Every size is a prefix of
+// the same fixture, so the prose is distinct rather than repeated -- repeating
+// it would be measured once and reused, hiding the effect.
+//
+// Read the result as a curve, not as individual numbers. Cost per kilobyte
+// falls at first -- a run has a fixed cost of roughly 15 ms, and the larger the
+// file the further that is spread -- then bottoms out and climbs again. The
+// climb is the defect: past about 64 KB each additional kilobyte costs more
+// than the last, because part of the pipeline scans from the start of the
+// document rather than from where it left off. Marginal cost per KB currently
+// runs 0.32 (8->16 KB), 0.49 (16->32), 0.67 (32->64), 0.89 (64->112).
+//
+// A fix should flatten the tail. Watch the last two sizes.
+func BenchmarkLintMDScale(b *testing.B) {
+	src, err := os.ReadFile("../../testdata/fixtures/benchmarks/bench.md")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	dir := b.TempDir()
+	for _, kb := range []int{4, 8, 16, 32, 64, 112} {
+		size := kb * 1024
+		if size > len(src) {
+			// The fixture bounds the range. Sizes past it are skipped rather
+			// than fatal, so shrinking the fixture cannot break the benchmark.
+			continue
+		}
+
+		// Cut back to a line break so the prefix is still valid Markdown.
+		chunk := src[:size]
+		if i := bytes.LastIndexByte(chunk, '\n'); i > 0 {
+			chunk = chunk[:i]
+		}
+
+		path := filepath.Join(dir, fmt.Sprintf("bench-%dkb.md", kb))
+		if err = os.WriteFile(path, chunk, 0o600); err != nil {
+			b.Fatal(err)
+		}
+
+		b.Run(fmt.Sprintf("%dKB", kb), func(b *testing.B) {
+			benchmarkLint(b, path)
+			// The trend is the point, so report the derived figure directly
+			// rather than making a reader divide six numbers by hand.
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/float64(kb), "ns/KB")
+		})
+	}
 }
 
 // A setting written for a rule takes precedence over one written for its

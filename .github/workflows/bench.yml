@@ -1,0 +1,154 @@
+name: Benchmark
+
+# Compares a pull request against its merge base on the same runner, in the
+# same job. Absolute timings from a shared CI machine are close to meaningless
+# -- the hardware varies between runs and neighbouring jobs compete for it --
+# but a ratio measured minutes apart on one box is worth reading. `benchstat`
+# reports that ratio with a confidence interval, so noise shows up as "~"
+# rather than as a number somebody has to interpret.
+#
+# Two kinds of memory are tracked, and they are not interchangeable.
+#
+# `-benchmem` reports bytes and allocations per operation. This is the
+# sensitive one: it scales with the work done -- a 112 KB file currently costs
+# ~39 MB and ~357k allocations -- so a change to the hot path shows up here.
+#
+# Peak RSS is close to constant in Vale: 32-33 MB whether the run lints nothing,
+# one 2.8 MB file, or 23 MB across 200 files. Memory is dominated by the rules
+# and the NLP model, and files are streamed rather than accumulated. So a flat
+# RSS says nothing about per-document memory -- read `-benchmem` for that. It is
+# still worth measuring, because it catches the two things allocation counts
+# hide: growth in that fixed footprint, and state that leaks across files.
+
+on:
+  pull_request:
+  # Manual runs are useful for checking a suspicion without opening a PR.
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Ref to compare against
+        default: v3
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Compare against base
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "1" # required for the tree-sitter parsers
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # both sides of the comparison
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Resolve base
+        id: base
+        run: |
+          BASE="${{ github.event.inputs.base || github.event.pull_request.base.sha }}"
+          echo "ref=$BASE" >> "$GITHUB_OUTPUT"
+          git worktree add /tmp/base "$BASE"
+
+      # A corpus of many mid-sized files, which is the shape real documentation
+      # takes. Each copy gets a unique heading: identical blocks are linted once
+      # and reused, so repeating a file unchanged would measure the cache.
+      - name: Build the RSS corpus
+        run: |
+          mkdir -p /tmp/corpus
+          for i in $(seq 1 40); do
+            { echo "# Copy $i"; echo; cat testdata/fixtures/benchmarks/bench.md; } \
+              > "/tmp/corpus/doc-$i.md"
+          done
+          du -sh /tmp/corpus
+
+      # -count=6 is the minimum benchstat needs for a confidence interval.
+      # -benchtime is fixed rather than time-based so both sides do identical
+      # work regardless of how fast the runner happens to be.
+      - name: Benchmark this branch
+        run: |
+          go test -run='^$' -bench=. -benchtime=10x -count=6 -benchmem \
+            ./internal/lint ./internal/check ./internal/core \
+            | tee /tmp/new.txt
+
+      - name: Benchmark the base
+        working-directory: /tmp/base
+        run: |
+          go test -run='^$' -bench=. -benchtime=10x -count=6 -benchmem \
+            ./internal/lint ./internal/check ./internal/core \
+            | tee /tmp/old.txt
+
+      # Peak RSS of a real run, which per-op allocation counts do not show.
+      # Five runs and the lowest taken: a runner can only inflate a measurement
+      # (by stealing CPU or memory bandwidth), so the minimum is the least
+      # contaminated sample rather than an average of noise.
+      - name: Peak memory, both sides
+        run: |
+          rss() { # $1: directory to build in, $2: label
+            ( cd "$1" && go build -o /tmp/vale-"$2" ./cmd/vale )
+            best=""
+            for _ in 1 2 3 4 5; do
+              kb=$(/usr/bin/time -f '%M' /tmp/vale-"$2" \
+                     --no-exit --output=JSON /tmp/corpus 2>&1 >/dev/null | tail -1)
+              case "$kb" in ''|*[!0-9]*) continue ;; esac
+              if [ -z "$best" ] || [ "$kb" -lt "$best" ]; then best=$kb; fi
+            done
+            echo "$best"
+          }
+          NEW_KB=$(rss "$GITHUB_WORKSPACE" new)
+          OLD_KB=$(rss /tmp/base old)
+          {
+            echo "peak-rss-base $OLD_KB KB"
+            echo "peak-rss-head $NEW_KB KB"
+          } | tee /tmp/rss.txt
+          echo "OLD_KB=$OLD_KB" >> "$GITHUB_ENV"
+          echo "NEW_KB=$NEW_KB" >> "$GITHUB_ENV"
+
+      - name: Report
+        run: |
+          benchstat /tmp/old.txt /tmp/new.txt | tee /tmp/stat.txt
+          {
+            echo "## Benchmark"
+            echo
+            echo "Base \`${{ steps.base.outputs.ref }}\` vs. this branch, same runner."
+            echo '`~` means the difference was inside the noise.'
+            echo
+            echo '```'
+            cat /tmp/stat.txt
+            echo '```'
+            echo
+            echo "### Peak memory"
+            echo
+            echo "| | peak RSS |"
+            echo "| --- | --- |"
+            echo "| base | $(( OLD_KB / 1024 )) MB |"
+            echo "| this branch | $(( NEW_KB / 1024 )) MB |"
+            echo
+            echo "Best of five runs over 40 documents (~4.7 MB of Markdown)."
+            echo
+            echo "Expect this to be flat: Vale's peak RSS does not scale with"
+            echo "corpus size. A move here means the fixed footprint changed, or"
+            echo "something is now held across files."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A hard threshold would fail on runner noise and be ignored within a
+      # month. The numbers go in the job summary; a human reads them.
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            /tmp/old.txt
+            /tmp/new.txt
+            /tmp/stat.txt
+            /tmp/rss.txt
+          retention-days: 30
