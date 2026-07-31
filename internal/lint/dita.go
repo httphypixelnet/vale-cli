@@ -12,7 +12,7 @@ import (
 	"github.com/errata-ai/vale/v3/internal/system"
 )
 
-func (l Linter) lintDITA(file *core.File) error {
+func (l *Linter) lintDITA(file *core.File) error {
 	var out bytes.Buffer
 	var htmlFile string
 

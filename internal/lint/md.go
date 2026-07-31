@@ -36,7 +36,7 @@ var reLinkDef = regexp.MustCompile(`\[(?:[^]\n]+)\]:`)
 
 var reNumericList = regexp.MustCompile(`(?m)^\d+\.`)
 
-func (l Linter) lintMarkdown(f *core.File) error {
+func (l *Linter) lintMarkdown(f *core.File) error {
 	var buf bytes.Buffer
 
 	err := l.lintMetadata(f)

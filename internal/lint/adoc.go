@@ -78,6 +78,33 @@ var (
 
 )
 
+const adocServer = `Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+$stdin.binmode
+$stdout.binmode
+
+require "asciidoctor"
+
+attrs = {}
+ARGV.each { |a| k, _, v = a.partition("="); attrs[k] = v }
+
+while (header = $stdin.gets)
+  n = header.to_i
+  break if n < 0
+  doc = n.zero? ? "" : $stdin.read(n)
+  break if doc.nil?
+
+  begin
+    out = Asciidoctor.convert(doc.force_encoding("UTF-8"),
+      standalone: false, safe: :secure, attributes: attrs).to_s
+    $stdout.write("ok #{out.bytesize}\n", out)
+  rescue => e
+    msg = e.message.to_s
+    $stdout.write("err #{msg.bytesize}\n", msg)
+  end
+  $stdout.flush
+end`
+
 // adocLoadPath finds Asciidoctor's library, starting from its executable.
 //
 // Asking Ruby does not work: the `asciidoctor` on PATH is often a shim that
@@ -86,14 +113,14 @@ var (
 // does sit near the executable in every layout that ships one, so the search
 // starts there and walks up.
 func adocLoadPath(exe string) string {
-	real, err := filepath.EvalSymlinks(exe)
+	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {
 		return ""
 	}
 
 	// bin/asciidoctor -> the prefix holding it, and its parent for layouts
 	// that put the gem in a sibling directory.
-	dir := filepath.Dir(filepath.Dir(real))
+	dir := filepath.Dir(filepath.Dir(resolved))
 	for i := 0; i < 3 && dir != "/" && dir != "."; i++ {
 		for _, pattern := range []string{
 			filepath.Join(dir, "lib", "asciidoctor.rb"),
@@ -131,7 +158,7 @@ func adocFastPath() []string {
 		// carries a non-ASCII character on purpose: a mismatched default
 		// encoding is what broke the first version of this, and an ASCII-only
 		// probe would have passed anyway.
-		probe, err := startAdocProc(candidate, nil)
+		probe, err := startExtProc(candidate, nil)
 		if err != nil {
 			return
 		}
@@ -213,7 +240,7 @@ func (l *Linter) callAdoc(text, exe string, attrs map[string]string) (string, er
 		l.adocOnce.Do(func() {
 			// One process per file Vale has in flight; more would idle and
 			// fewer would make the concurrent walk queue behind them.
-			pool, err := newAdocPool(direct, converted, adocConcurrency)
+			pool, err := newProcPool(direct, converted, adocConcurrency)
 			if err == nil {
 				l.adoc = pool
 			}

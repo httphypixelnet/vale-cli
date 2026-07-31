@@ -29,7 +29,7 @@ func (w *ExtendedHTMLWriter) WriteComment(n org.Comment) {
 	w.HTMLWriter.WriteString(" -->\n")
 }
 
-func (l Linter) lintOrg(f *core.File) error {
+func (l *Linter) lintOrg(f *core.File) error {
 	extendedWriter := &ExtendedHTMLWriter{orgWriter}
 	orgWriter.ExtendingWriter = extendedWriter
 

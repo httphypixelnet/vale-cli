@@ -20,7 +20,7 @@ var xsltArgs = []string{
 	"nop",
 }
 
-func (l Linter) lintXML(file *core.File) error {
+func (l *Linter) lintXML(file *core.File) error {
 	var out bytes.Buffer
 	var eut bytes.Buffer
 

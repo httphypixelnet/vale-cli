@@ -34,8 +34,12 @@ type Linter struct {
 	// caller -- the language server, or anything embedding Vale -- lints many
 	// times in one process, and a pool with no owner is a pool nothing ever
 	// stops.
-	adoc     *adocPool
+	adoc     *procPool
 	adocOnce sync.Once
+
+	// mdx is the same arrangement for mdx2vast.
+	mdx     *procPool
+	mdxOnce sync.Once
 
 	// inScope lists the rules whose scope matches a given block scope, keyed by
 	// the block's scope and parent.
@@ -455,5 +459,10 @@ func (l *Linter) stopExternal() {
 		l.adoc.stop()
 		l.adoc = nil
 		l.adocOnce = sync.Once{}
+	}
+	if l.mdx != nil {
+		l.mdx.stop()
+		l.mdx = nil
+		l.mdxOnce = sync.Once{}
 	}
 }

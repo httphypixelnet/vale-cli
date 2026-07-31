@@ -10,20 +10,21 @@ import (
 	"sync"
 )
 
-// A pool of long-lived Asciidoctor processes.
+// A pool of long-lived helper processes.
 //
-// Converting a document costs a few milliseconds; starting Ruby and loading
-// Asciidoctor costs about fifty. Vale was paying the latter once per file, so
-// on a corpus of a few hundred AsciiDoc pages nearly all of the time went to
-// starting the same program over and over.
+// Vale hands AsciiDoc to Asciidoctor and MDX to mdx2vast. Converting a document
+// costs a few milliseconds either way; starting the interpreter and loading the
+// library costs fifty to a hundred and sixty. Vale was paying the latter once
+// per file, so on a corpus of a few hundred pages nearly all of the time went
+// to starting the same program over and over.
 //
 // These processes stay up for the run and convert documents as they arrive.
 // There are several because Vale lints files concurrently and a single process
 // would serialise them; each one handles a request at a time, and the pool is
 // sized to the number of files Vale has in flight.
 //
-// The framing matches mdx2vast's, and for the same reason: AsciiDoc can contain
-// any byte sequence a delimiter might use, so requests carry a length.
+// Both helpers speak the same framing, and for the same reason: a document can
+// contain any byte sequence a delimiter might use, so requests carry a length.
 //
 //	request   <byteLength> LF <bytes>
 //	response  "ok " <byteLength> LF <bytes>
@@ -31,41 +32,15 @@ import (
 //
 // A document that fails to convert answers `err` and the process stays up. One
 // unparseable file must not cost the rest of the run its warm processes.
-const adocServer = `Encoding.default_external = Encoding::UTF_8
-Encoding.default_internal = Encoding::UTF_8
-$stdin.binmode
-$stdout.binmode
 
-require "asciidoctor"
-
-attrs = {}
-ARGV.each { |a| k, _, v = a.partition("="); attrs[k] = v }
-
-while (header = $stdin.gets)
-  n = header.to_i
-  break if n < 0
-  doc = n.zero? ? "" : $stdin.read(n)
-  break if doc.nil?
-
-  begin
-    out = Asciidoctor.convert(doc.force_encoding("UTF-8"),
-      standalone: false, safe: :secure, attributes: attrs).to_s
-    $stdout.write("ok #{out.bytesize}\n", out)
-  rescue => e
-    msg = e.message.to_s
-    $stdout.write("err #{msg.bytesize}\n", msg)
-  end
-  $stdout.flush
-end`
-
-// adocProc is one Asciidoctor process and the pipes to talk to it.
-type adocProc struct {
+// extProc is one Asciidoctor process and the pipes to talk to it.
+type extProc struct {
 	cmd *exec.Cmd
 	in  io.WriteCloser
 	out *bufio.Reader
 }
 
-func startAdocProc(argv, attrs []string) (*adocProc, error) {
+func startExtProc(argv, attrs []string) (*extProc, error) {
 	args := append(append([]string{}, argv[1:]...), attrs...)
 
 	cmd := exec.Command(argv[0], args...) //nolint:gosec // argv is ours
@@ -83,11 +58,11 @@ func startAdocProc(argv, attrs []string) (*adocProc, error) {
 		return nil, err
 	}
 
-	return &adocProc{cmd: cmd, in: stdin, out: bufio.NewReaderSize(stdout, 64<<10)}, nil
+	return &extProc{cmd: cmd, in: stdin, out: bufio.NewReaderSize(stdout, 64<<10)}, nil
 }
 
 // convert sends one document and reads its reply.
-func (p *adocProc) convert(text string) (string, error) {
+func (p *extProc) convert(text string) (string, error) {
 	if _, err := fmt.Fprintf(p.in, "%d\n", len(text)); err != nil {
 		return "", err
 	}
@@ -121,23 +96,23 @@ func (p *adocProc) convert(text string) (string, error) {
 	return string(body), nil
 }
 
-func (p *adocProc) close() {
+func (p *extProc) close() {
 	_ = p.in.Close()
 	_ = p.cmd.Wait()
 }
 
-// adocPool hands out warm processes.
-type adocPool struct {
-	free chan *adocProc
+// procPool hands out warm processes.
+type procPool struct {
+	free chan *extProc
 	mu   sync.Mutex
-	all  []*adocProc
+	all  []*extProc
 }
 
-func newAdocPool(argv, attrs []string, size int) (*adocPool, error) {
-	pool := &adocPool{free: make(chan *adocProc, size)}
+func newProcPool(argv, attrs []string, size int) (*procPool, error) {
+	pool := &procPool{free: make(chan *extProc, size)}
 
 	for i := 0; i < size; i++ {
-		proc, err := startAdocProc(argv, attrs)
+		proc, err := startExtProc(argv, attrs)
 		if err != nil {
 			pool.stop()
 			return nil, err
@@ -154,14 +129,14 @@ func newAdocPool(argv, attrs []string, size int) (*adocPool, error) {
 // A process that errors at the protocol level is replaced rather than reused:
 // its pipes may hold a partial reply, and every later document on it would be
 // read out of step.
-func (pool *adocPool) convert(text string, argv, attrs []string) (string, error) {
+func (pool *procPool) convert(text string, argv, attrs []string) (string, error) {
 	proc := <-pool.free
 
 	out, err := proc.convert(text)
 	if err != nil && !strings.HasPrefix(err.Error(), "asciidoctor:") {
 		proc.close()
 
-		replacement, startErr := startAdocProc(argv, attrs)
+		replacement, startErr := startExtProc(argv, attrs)
 		if startErr != nil {
 			pool.free <- proc // nothing better to offer
 			return "", err
@@ -179,7 +154,7 @@ func (pool *adocPool) convert(text string, argv, attrs []string) (string, error)
 	return out, err
 }
 
-func (pool *adocPool) stop() {
+func (pool *procPool) stop() {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 

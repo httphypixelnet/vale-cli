@@ -50,7 +50,7 @@ func TestAdocPoolSurvivesABadDocument(t *testing.T) {
 		t.Skip("asciidoctor not resolvable on this machine")
 	}
 
-	pool, err := newAdocPool(argv, nil, 1)
+	pool, err := newProcPool(argv, nil, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
