@@ -7,8 +7,8 @@ branches: if you are on an older version, upgrading is the fix.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 3.16.x  | :white_check_mark: |
-| < 3.16  | :x:                |
+| 3.17.x  | :white_check_mark: |
+| < 3.17  | :x:                |
 
 ## Reporting a vulnerability
 
