@@ -189,7 +189,7 @@ func (l *Linter) lintRST(f *core.File) error {
 func (l *Linter) callRst(text, exe string) (string, error) {
 	if direct := rstFastPath(exe); direct != nil {
 		l.rstOnce.Do(func() {
-			pool, err := newProcPool(direct, rstArgs, adocConcurrency)
+			pool, err := newProcPool(direct, rstArgs, l.poolSize())
 			if err == nil {
 				l.rst = pool
 			}

@@ -108,7 +108,7 @@ func (l *Linter) lintMDX(f *core.File) error {
 func (l *Linter) callMDX(text, exe string) (string, error) {
 	if direct := mdxFastPath(); direct != nil {
 		l.mdxOnce.Do(func() {
-			pool, err := newProcPool(direct, nil, adocConcurrency)
+			pool, err := newProcPool(direct, nil, l.poolSize())
 			if err == nil {
 				l.mdx = pool
 			}

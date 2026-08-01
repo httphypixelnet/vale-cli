@@ -43,6 +43,14 @@ type Linter struct {
 	rst     *procPool
 	rstOnce sync.Once
 
+	// singleDoc marks a run that lints exactly one document.
+	//
+	// The pools above are sized for a walk over many files: one interpreter
+	// per file in flight. A run holding a single document would start that
+	// many, convert one document, and stop them again -- strictly more work
+	// than the one process the unpooled path used. Such a run keeps one.
+	singleDoc bool
+
 	// inScope lists the rules whose scope matches a given block scope, keyed by
 	// the block's scope and parent.
 	//
@@ -96,8 +104,18 @@ func (l *Linter) Transform(f *core.File) (string, error) {
 	return applyPatterns(l.Manager.Config, exts, f.Content)
 }
 
+// poolSize is how many helper processes to keep warm for this run.
+func (l *Linter) poolSize() int {
+	if l.singleDoc {
+		return 1
+	}
+	return adocConcurrency
+}
+
 // LintString src according to its format.
 func (l *Linter) LintString(src string) ([]*core.File, error) {
+	l.singleDoc = true
+
 	linted := l.lintFile(src)
 	return []*core.File{linted.file}, linted.err
 }
@@ -115,6 +133,11 @@ func (l *Linter) Lint(input []string, pat string) ([]*core.File, error) {
 	}
 
 	l.glob = &gp
+
+	// `vale README.adoc` is as much a single-document run as linting a string
+	// is; only a directory can turn into the concurrent walk the pools are
+	// sized for.
+	l.singleDoc = len(input) == 1 && !system.IsDir(input[0])
 
 	// Whatever external processes this run starts, it also stops. Lint may be
 	// called again on the same Linter, so the next run starts its own.
@@ -460,4 +483,5 @@ func (l *Linter) stopExternal() {
 		l.rst = nil
 		l.rstOnce = sync.Once{}
 	}
+	l.singleDoc = false
 }

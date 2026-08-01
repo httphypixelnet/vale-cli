@@ -240,7 +240,7 @@ func (l *Linter) callAdoc(text, exe string, attrs map[string]string) (string, er
 		l.adocOnce.Do(func() {
 			// One process per file Vale has in flight; more would idle and
 			// fewer would make the concurrent walk queue behind them.
-			pool, err := newProcPool(direct, converted, adocConcurrency)
+			pool, err := newProcPool(direct, converted, l.poolSize())
 			if err == nil {
 				l.adoc = pool
 			}
