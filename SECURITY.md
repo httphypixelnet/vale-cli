@@ -5,10 +5,10 @@
 Security fixes go into the latest release. There are no long-term support
 branches: if you are on an older version, upgrading is the fix.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 3.17.x  | :white_check_mark: |
-| < 3.17  | :x:                |
+| Version                                                            | Supported          |
+| ------------------------------------------------------------------ | ------------------ |
+| [Latest release](https://github.com/vale-cli/vale/releases/latest) | :white_check_mark: |
+| Anything earlier                                                   | :x:                |
 
 ## Reporting a vulnerability
 
