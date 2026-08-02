@@ -1,0 +1,289 @@
+# Every markup and source format Vale can lint.
+name: lint
+dir: fixtures/formats
+
+cases:
+  - name: excluded-folders
+    dir: ../folders
+    args: .
+    exit: 0
+    want: ""
+
+  - name: css
+    args: test.css
+    exit: 0
+    want: |
+      test.css:1:4:vale.Annotations:'TODO' left in text
+      test.css:7:19:vale.Annotations:'XXX' left in text
+
+  - name: yaml
+    args: test.yml
+    exit: 0
+    want: |
+      test.yml:3:19:vale.Annotations:'TODO' left in text
+      test.yml:15:45:vale.Annotations:'XXX' left in text
+
+  - name: julia
+    args: test.jl
+    exit: 0
+    want: |
+      test.jl:1:3:vale.Annotations:'NOTE' left in text
+      test.jl:4:3:vale.Annotations:'NOTE' left in text
+      test.jl:9:7:vale.Annotations:'NOTE' left in text
+      test.jl:21:17:vale.Annotations:'NOTE' left in text
+      test.jl:47:3:vale.Annotations:'XXX' left in text
+
+  - name: java
+    args: test.java
+    exit: 0
+    want: |
+      test.java:1:4:vale.Annotations:'XXX' left in text
+      test.java:9:4:vale.Annotations:'TODO' left in text
+
+  - name: proto
+    args: test.proto
+    exit: 0
+    want: |
+      test.proto:13:6:vale.Annotations:'NOTE' left in text
+      test.proto:22:4:vale.Annotations:'XXX' left in text
+      test.proto:31:1:vale.Annotations:'NOTE' left in text
+
+  - name: org
+    args: test.org
+    exit: 0
+    want: |
+      test.org:17:4:vale.Annotations:'TODO' left in text
+      test.org:50:18:vale.Annotations:'TODO' left in text
+
+  - name: dita
+    args: test.dita
+    requires: dita
+    exit: 0
+    want: |
+      test.dita:20:82:vale.Annotations:'TODO' left in text
+      test.dita:25:21:vale.Annotations:'NOTE' left in text
+
+  - name: xml
+    args: test.xml
+    requires: xsltproc
+    exit: 0
+    want: |
+      test.xml:19:34:vale.Annotations:'TODO' left in text
+      test.xml:23:21:vale.Annotations:'XXX' left in text
+      test.xml:24:53:vale.Annotations:'FIXME' left in text
+
+  - name: json
+    args: test.json
+    exit: 0
+    want: |
+      test.json:9:10:vale.Annotations:'XXX' left in text
+      test.json:12:19:vale.Annotations:'TODO' left in text
+
+  - name: text
+    args: test.txt
+    exit: 0
+    want: |
+      test.txt:1:27:vale.Annotations:'NOTE' left in text
+      test.txt:4:12:vale.Annotations:'XXX' left in text
+      test.txt:4:66:vale.Annotations:'TODO' left in text
+
+  - name: asciidoc
+    args: test.adoc
+    requires: asciidoctor
+    exit: 0
+    want: |
+      test.adoc:10:39:vale.Annotations:'TODO' left in text
+      test.adoc:29:27:vale.Annotations:'XXX' left in text
+      test.adoc:44:1:vale.Annotations:'TODO' left in text
+      test.adoc:59:1:vale.Annotations:'FIXME' left in text
+      test.adoc:59:21:vale.Annotations:'TODO' left in text
+      test.adoc:59:27:vale.Annotations:'XXX' left in text
+      test.adoc:64:38:vale.Annotations:'XXX' left in text
+      test.adoc:66:20:vale.Annotations:'TODO' left in text
+      test.adoc:75:16:vale.Annotations:'TODO' left in text
+      test.adoc:79:6:vale.Annotations:'NOTE' left in text
+      test.adoc:86:6:vale.Annotations:'NOTE' left in text
+
+  - name: python
+    args: test.py
+    exit: 0
+    want: |
+      test.py:1:3:vale.Annotations:'FIXME' left in text
+      test.py:5:5:vale.Annotations:'FIXME' left in text
+      test.py:11:3:vale.Annotations:'XXX' left in text
+      test.py:13:16:vale.Annotations:'XXX' left in text
+      test.py:14:14:vale.Annotations:'NOTE' left in text
+      test.py:28:5:vale.Annotations:'NOTE' left in text
+      test.py:35:8:vale.Annotations:'NOTE' left in text
+      test.py:37:5:vale.Annotations:'TODO' left in text
+
+  - name: cpp
+    args: test.cc
+    exit: 0
+    want: |
+      test.cc:1:4:vale.Annotations:'XXX' left in text
+      test.cc:9:6:vale.Annotations:'NOTE' left in text
+      test.cc:13:6:vale.Annotations:'XXX' left in text
+      test.cc:17:5:vale.Annotations:'FIXME' left in text
+      test.cc:20:5:vale.Annotations:'XXX' left in text
+      test.cc:23:37:vale.Annotations:'XXX' left in text
+
+  - name: clojure
+    args: test.clj
+    exit: 0
+    want: |
+      test.clj:3:6:vale.Annotations:'NOTE' left in text
+      test.clj:5:15:vale.Annotations:'TODO' left in text
+      test.clj:7:6:vale.Annotations:'FIXME' left in text
+      test.clj:9:11:vale.Annotations:'XXX' left in text
+
+  - name: jsx
+    args: test.jsx
+    exit: 0
+    want: |
+      test.jsx:1:4:vale.Annotations:'XXX' left in text
+      test.jsx:4:6:vale.Annotations:'NOTE' left in text
+      test.jsx:14:3:vale.Annotations:'XXX' left in text
+      test.jsx:18:37:vale.Annotations:'TODO' left in text
+
+  - name: markdown
+    args: test.md
+    exit: 0
+    want: |
+      test.md:3:1:vale.Annotations:'NOTE' left in text
+      test.md:32:1:vale.Annotations:'XXX' left in text
+      test.md:34:29:vale.Annotations:'TODO' left in text
+      test.md:36:3:vale.Annotations:'TODO' left in text
+      test.md:36:10:vale.Annotations:'XXX' left in text
+      test.md:36:16:vale.Annotations:'FIXME' left in text
+      test.md:40:21:vale.Annotations:'FIXME' left in text
+      test.md:44:5:vale.Annotations:'TODO' left in text
+      test.md:46:3:vale.Annotations:'TODO' left in text
+
+  - name: assigned-ext
+    about: --ext overrides the extension
+    args: "--ext=.md test.xyz"
+    exit: 0
+    want: |
+      test.xyz:3:1:vale.Annotations:'NOTE' left in text
+      test.xyz:32:1:vale.Annotations:'XXX' left in text
+      test.xyz:34:29:vale.Annotations:'TODO' left in text
+      test.xyz:36:3:vale.Annotations:'TODO' left in text
+      test.xyz:36:10:vale.Annotations:'XXX' left in text
+      test.xyz:36:16:vale.Annotations:'FIXME' left in text
+      test.xyz:40:21:vale.Annotations:'FIXME' left in text
+      test.xyz:44:5:vale.Annotations:'TODO' left in text
+      test.xyz:46:3:vale.Annotations:'TODO' left in text
+
+  - name: mdx
+    args: test.mdx
+    requires: mdx2vast
+    exit: 0
+    want: |
+      test.mdx:13:70:vale.Annotations:'TODO' left in text
+      test.mdx:24:1:vale.Annotations:'TODO' left in text
+      test.mdx:34:26:vale.Annotations:'TODO' left in text
+
+  - name: restructuredtext
+    args: test.rst
+    requires: rst2html
+    exit: 0
+    want: |
+      test.rst:4:34:vale.Annotations:'XXX' left in text
+      test.rst:37:45:vale.Annotations:'TODO' left in text
+      test.rst:58:1:vale.Annotations:'NOTE' left in text
+      test.rst:60:40:vale.Annotations:'TODO' left in text
+      test.rst:63:3:vale.Annotations:'TODO' left in text
+      test.rst:63:29:vale.Annotations:'XXX' left in text
+      test.rst:69:3:vale.Annotations:'FIXME' left in text
+      test.rst:75:3:vale.Annotations:'TODO' left in text
+      test.rst:75:38:vale.Annotations:'XXX' left in text
+      test.rst:81:10:vale.Annotations:'TODO' left in text
+
+  - name: rust
+    args: test.rs
+    exit: 0
+    want: |
+      test.rs:1:5:vale.Annotations:'NOTE' left in text
+      test.rs:3:5:vale.Annotations:'XXX' left in text
+      test.rs:5:17:vale.Annotations:'TODO' left in text
+      test.rs:7:4:vale.Annotations:'FIXME' left in text
+      test.rs:9:5:vale.Annotations:'XXX' left in text
+
+  - name: r
+    args: test.r
+    exit: 0
+    want: |
+      test.r:1:3:vale.Annotations:'NOTE' left in text
+      test.r:6:22:vale.Annotations:'XXX' left in text
+
+  - name: php
+    args: test.php
+    exit: 0
+    want: |
+      test.php:2:31:vale.Annotations:'XXX' left in text
+      test.php:3:8:vale.Annotations:'NOTE' left in text
+      test.php:4:8:vale.Annotations:'FIXME' left in text
+      test.php:6:33:vale.Annotations:'TODO' left in text
+
+  - name: powershell
+    args: test.ps1
+    exit: 0
+    want: |
+      test.ps1:2:24:vale.Annotations:'XXX' left in text
+      test.ps1:4:9:vale.Annotations:'NOTE' left in text
+      test.ps1:5:9:vale.Annotations:'FIXME' left in text
+      test.ps1:8:26:vale.Annotations:'TODO' left in text
+
+  - name: lua
+    args: test.lua
+    exit: 0
+    want: |
+      test.lua:1:4:vale.Annotations:'NOTE' left in text
+      test.lua:2:19:vale.Annotations:'XXX' left in text
+      test.lua:5:7:vale.Annotations:'NOTE' left in text
+      test.lua:9:6:vale.Annotations:'XXX' left in text
+      test.lua:15:4:vale.Annotations:'TODO' left in text
+
+  - name: haskell
+    args: test.hs
+    exit: 0
+    want: |
+      test.hs:2:4:vale.Annotations:'NOTE' left in text
+      test.hs:5:6:vale.Annotations:'TODO' left in text
+      test.hs:6:25:vale.Annotations:'XXX' left in text
+      test.hs:11:41:vale.Annotations:'XXX' left in text
+
+  - name: typescript
+    args: test.ts
+    exit: 0
+    want: |
+      test.ts:1:4:vale.Annotations:'TODO' left in text
+      test.ts:17:4:vale.Annotations:'XXX' left in text
+
+  - name: ruby
+    args: test.rb
+    exit: 0
+    want: |
+      test.rb:2:1:vale.Annotations:'NOTE' left in text
+      test.rb:6:1:vale.Annotations:'XXX' left in text
+      test.rb:9:23:vale.Annotations:'XXX' left in text
+      test.rb:11:3:vale.Annotations:'TODO' left in text
+
+  - name: assigned-format
+    about: "[formats] maps the extension"
+    dir: subdir3
+    args: .
+    requires: mdx2vast
+    exit: 0
+    want: |
+      test.mdx:3:1:vale.Annotations:'NOTE' left in text
+      test.mdx:29:5:vale.Annotations:'XXX' left in text
+      test.mdx:32:1:vale.Annotations:'XXX' left in text
+      test.mdx:34:29:vale.Annotations:'TODO' left in text
+      test.mdx:36:3:vale.Annotations:'TODO' left in text
+      test.mdx:36:10:vale.Annotations:'XXX' left in text
+      test.mdx:36:16:vale.Annotations:'FIXME' left in text
+      test.mdx:40:21:vale.Annotations:'FIXME' left in text
+      test.mdx:44:5:vale.Annotations:'TODO' left in text
+      test.mdx:46:3:vale.Annotations:'TODO' left in text

@@ -38,9 +38,8 @@ If you're looking to improve Vale's documentation, it lives in a separate reposi
 Prerequisites:
 
 * [Go](https://go.dev/dl/) matching the version in [`go.mod`](../go.mod). Building requires `CGO_ENABLED=1` for the tree-sitter parsers.
-* [Ruby](https://www.ruby-lang.org/en/downloads/) (v3.3) with [Bundler](https://bundler.io/), for the Cucumber suite.
 
-The Cucumber suite shells out to external converters, so these also need to be on your `$PATH`:
+The end-to-end suite shells out to external converters, so these also need to be on your `$PATH`:
 
 * [Asciidoctor](https://asciidoctor.org/)
 * [rst2html](https://docutils.sourceforge.io/docs/user/tools.html#rst2html-py), installed with [docutils](https://pypi.org/project/docutils/) or [Sphinx](https://www.sphinx-doc.org/)
@@ -51,32 +50,109 @@ The Cucumber suite shells out to external converters, so these also need to be o
 Then build and test:
 
 ```bash
-make setup                    # bundle install for the Cucumber suite
 make build os=linux exe=vale  # writes ./bin/vale
-export PATH="$PWD/bin:$PATH"  # the Cucumber steps invoke a bare `vale`
-make test
+make test                     # go test ./...
 ```
 
 `make build` takes `os`, `arch`, and `exe`; omitting `os` and `arch` builds for the host platform. On Windows, use `exe=vale.exe`.
 
 ## Testing
 
-Vale is tested with both unit and integration tests, and `make test` runs both.
+Vale is tested with both unit and end-to-end tests, and `make test` runs both. `go test ./...` runs them too, but hides the end-to-end progress display&mdash;`go test` throws away a passing package's output, so `make test` builds that suite and runs it directly.
 
-Unit tests are the `*_test.go` files inside the Go packages. Integration tests are written against [Cucumber](https://cucumber.io/) and live in [`testdata/`](../testdata/): `features/` holds the scenarios and step definitions, and `fixtures/` holds the configurations and documents they lint.
+Unit tests are the `*_test.go` files inside the Go packages.
 
-To run one side on its own:
+End-to-end tests build `vale`, invoke it the way a user would, and compare its combined output against what the case declares. The runner is [`internal/e2e`](../internal/e2e); the cases are in [`testdata/e2e/`](../testdata/e2e/), one YAML file per suite:
 
-```bash
-# Go tests only
-go test ./internal/... ./cmd/vale
+```yaml
+# Every markup and source format Vale can lint.
+name: lint
+dir: fixtures/formats
 
-# Cucumber only, or a single feature
-cd testdata && cucumber --format progress
-cd testdata && cucumber features/scopes.feature
+cases:
+  - name: css
+    args: test.css
+    exit: 1
+    want: |
+      test.css:1:4:vale.Annotations:'TODO' left in text
+      test.css:7:19:vale.Annotations:'XXX' left in text
 ```
 
-Both suites run on Linux and Windows in [`test.yml`](workflows/test.yml). The Cucumber suite is Linux-only in CI&mdash;its `aruba`/`childprocess`/`ffi` stack can't spawn processes on modern Windows with Ruby 3.x&mdash;so Windows covers the build and the Go tests.
+Every case is invoked with `--output=line --sort --normalize --relative --no-global` so that its output is stable across platforms; `args` is appended to those.
+
+| Key | |
+| --- | --- |
+| `name` | unique within the suite; may contain `/` to group related cases |
+| `about` | a note for the reader&mdash;an issue number, or what the case pins down |
+| `dir` | working directory, relative to the suite's. A suite `dir` ending in `/*` gives each case a directory named after it |
+| `args` | one string, split on spaces honoring quotes; or a list to pass words through verbatim |
+| `files` | the case's own files, written to a scratch directory it runs in&mdash;instead of a `dir` |
+| `requires` | external converters the case needs; it's skipped where they aren't installed |
+| `stdin` | a file in the working directory to pipe in |
+| `sync` | run `vale sync` first |
+| `exit` | expected exit status |
+| `want` | the exact output expected (`want: ""` asserts none) |
+| `contains` | an excerpt of it, when the rest is noise |
+| `absent` | strings the output must not contain |
+
+A case either runs in a checked-in fixture under `testdata/fixtures/` or brings its own files. A suite can declare `files:` that every case starts from, and each case adds or overrides on top&mdash;so a self-contained project reads in one place:
+
+```yaml
+name: config
+
+# Every case starts from these two documents, then adds the configuration
+# it needs. Each one runs in a scratch directory built from just these.
+files:
+  test.md: |
+    This is a very important sentence. There is a sentence here too.
+
+cases:
+  - name: level-warning
+    files:
+      .vale: |
+        StylesPath = ../../styles/
+        MinAlertLevel = warning
+
+        [*]
+        BasedOnStyles = vale
+    args: test.md
+    exit: 0
+    want: |
+      test.md:1:11:vale.Editorializing:Consider removing 'very'
+```
+
+Those scratch directories are built under `testdata/tmp/`, two levels down, so a relative `StylesPath` resolves exactly as it would in a real project.
+
+```bash
+# every case, or one suite, or one case
+go test ./internal/e2e
+go test ./internal/e2e -run 'TestScenarios/scopes'
+go test ./internal/e2e -run 'TestScenarios/lint/css'
+
+# the same, with the progress display
+make test run='-test.run TestScenarios/scopes'
+```
+
+The suite runs on Linux, macOS, and Windows. You don't need the whole documentation toolchain to work on Vale&mdash;a case whose `requires` aren't installed is skipped, and the run tells you what was missing:
+
+```
+....s.s..........ss....s...s.........s.....s.......s........
+
+149 cases in 17 suites — 104 passed, 45 skipped (4.7s)
+not installed: asciidoctor, dita, mdx2vast, rst2html — see .github/CONTRIBUTING.md
+```
+
+CI sets `VALE_E2E_STRICT=1`, which turns those skips into failures, so a converter that didn't install can't quietly pass for coverage.
+
+After an intentional change to Vale's output, rewrite the `want:` blocks in place rather than editing them by hand, then review the diff:
+
+```bash
+go test ./internal/e2e -update
+```
+
+To add a case, append it to the right suite with an empty `want: ""`, run `-update` to fill it in, and check that what it wrote is what you meant.
+
+Both suites run on Linux and Windows in [`test.yml`](workflows/test.yml). The end-to-end suite is Linux-only in CI because its scenarios need the documentation toolchain listed above; Windows covers the build and the unit tests.
 
 ## Benchmarking
 
@@ -103,7 +179,7 @@ Absolute timings from a shared CI runner aren't meaningful, but the ratio betwee
 To make the contribution process as seamless as possible, we ask for the following:
 
 * Fork the project and make your changes against `v3`.
-* Add or update tests for the behavior you're changing&mdash;a Cucumber scenario for user-visible behavior, a Go test for anything internal.
+* Add or update tests for the behavior you're changing&mdash;an [`internal/e2e`](../internal/e2e) scenario for user-visible behavior, a unit test for anything internal.
 * When you're ready to create a pull request, be sure to:
     * Run [golangci-lint](https://golangci-lint.run/) to check your Go code. The configuration is in [`.golangci.yml`](../.golangci.yml) and CI runs v2.5.
     * Run `gofmt` (or `go fmt ./...`) on anything you've touched.

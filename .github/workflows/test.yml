@@ -1,7 +1,7 @@
 name: Test
 
 # Replaces the former AppVeyor (Windows) and GitLab CI (Linux) pipelines:
-# build + run the full Go and Cucumber suites on both platforms.
+# build + run the test suite on every platform Vale ships for.
 
 on:
   push:
@@ -12,12 +12,19 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    name: Test (Linux)
-    runs-on: ubuntu-latest
+  # Linux and macOS differ only in where xsltproc comes from, so they share a
+  # job. Windows is separate: its runner image has no `make`.
+  unix:
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # a failure on one platform shouldn't hide the other
+      matrix:
+        include:
+          - { name: Linux, os: ubuntu-latest, goos: linux }
+          - { name: macOS, os: macos-latest, goos: darwin }
     env:
       CGO_ENABLED: "1" # required for the tree-sitter parsers
-      BUNDLE_GEMFILE: ${{ github.workspace }}/testdata/Gemfile
     steps:
       - uses: actions/checkout@v5
         with:
@@ -27,6 +34,7 @@ jobs:
         with:
           go-version: "1.25.7"
 
+      # For Asciidoctor, below -- the end-to-end suite lints AsciiDoc.
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
@@ -46,8 +54,11 @@ jobs:
 
       - name: Install documentation toolchain
         run: |
-          sudo apt-get -qq update
-          sudo apt-get install -y xsltproc
+          # macOS ships xsltproc; Ubuntu doesn't.
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get -qq update
+            sudo apt-get install -y xsltproc
+          fi
           python -m pip install --upgrade docutils sphinx  # rst2html
           gem install asciidoctor
           npm install -g mdx2vast
@@ -56,16 +67,13 @@ jobs:
           unzip -q dita-ot-3.6.zip
           echo "$PWD/dita-ot-3.6/bin" >> "$GITHUB_PATH"
 
-      - name: Setup (bundle install)
-        run: make setup
-
       - name: Build
-        run: make build os=linux exe=vale
+        run: make build os=${{ matrix.goos }} exe=vale
 
       - name: Test
-        run: |
-          export PATH="$PWD/bin:$PATH"
-          make test
+        run: make test
+        env:
+          VALE_E2E_STRICT: "1" # every converter above must really be present
 
   windows:
     name: Test (Windows)
@@ -84,14 +92,42 @@ jobs:
         with:
           go-version: "1.25.7"
 
+      # For Asciidoctor, below -- the end-to-end suite lints AsciiDoc.
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The same converters the Linux job installs.
+      - name: Install documentation toolchain
+        run: |
+          python -m pip install --upgrade docutils sphinx  # rst2html
+          gem install asciidoctor
+          npm install -g mdx2vast
+          choco install --no-progress -y xsltproc
+          curl -fsSL -o dita-ot-3.6.zip \
+            https://github.com/dita-ot/dita-ot/releases/download/3.6/dita-ot-3.6.zip
+          unzip -q dita-ot-3.6.zip
+          echo "$PWD/dita-ot-3.6/bin" >> "$GITHUB_PATH"
+
       - name: Build
         run: go build -o bin/vale.exe ./cmd/vale
 
-      # NOTE: The Cucumber suite runs on Linux only. Its aruba -> childprocess ->
-      # ffi stack can't spawn processes on modern Windows + Ruby 3.x (every step
-      # fails with `ChildProcess::Error: Unknown error`); AppVeyor only managed
-      # it on the now-unavailable Ruby 2.4. Windows still covers the build
-      # (including CGO/tree-sitter) and the Go unit tests -- which is where the
-      # Windows-specific behavior (path handling, etc.) actually lives.
-      - name: Test (Go)
-        run: go test ./internal/core ./internal/lint ./internal/check ./internal/nlp ./internal/glob ./cmd/vale
+      - name: Test
+        run: go test ./...
+        env:
+          # Fail rather than skip if a converter above didn't install, so a
+          # gap in the toolchain can't pass for coverage.
+          VALE_E2E_STRICT: "1"

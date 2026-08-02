@@ -1,0 +1,47 @@
+# The --filter flag, as an expression file and inline.
+name: cli/filter
+dir: fixtures/filters
+
+cases:
+  - name: min-alert-level
+    args: "--filter=min.expr ."
+    exit: 1
+    want: |
+      test.md:1:3:demo.Cap:'intro' should be in title case ('Intro').
+      test.md:5:8:Vale.Repetition:'is' is repeated!
+
+  - name: scope
+    args: "--filter=scope.expr ."
+    exit: 1
+    want: |
+      test.md:1:3:demo.Cap:'intro' should be in title case ('Intro').
+
+  - name: levels
+    args: "--filter=levels.expr ."
+    exit: 1
+    want: |
+      test.md:1:3:demo.HeadingStartsWithCapital:'intro' should be capitalized
+      test.md:5:8:Vale.Repetition:'is' is repeated!
+
+  - name: extends
+    args: "--filter=extends.expr ."
+    exit: 0
+    want: |
+      test.md:1:3:demo.HeadingStartsWithCapital:'intro' should be capitalized
+
+  - name: extends-inline
+    args:
+      - "--filter=.Extends in ['existence']"
+      - .
+    exit: 0
+    want: |
+      test.md:1:3:demo.HeadingStartsWithCapital:'intro' should be capitalized
+
+  - name: levels-inline
+    args:
+      - "--filter=.Level in ['error', 'suggestion'] and .Name != 'demo.Cap'"
+      - .
+    exit: 1
+    want: |
+      test.md:1:3:demo.HeadingStartsWithCapital:'intro' should be capitalized
+      test.md:5:8:Vale.Repetition:'is' is repeated!

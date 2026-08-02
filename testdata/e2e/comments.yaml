@@ -1,31 +1,34 @@
-Feature: Comments
+# `vale off` / `vale on` comments, per format.
+name: comments
+dir: fixtures/comments
 
-  Scenario: MDX
-    When I test comments for "test.mdx"
-    Then the output should contain exactly:
-      """
+cases:
+  - name: mdx
+    args: test.mdx
+    requires: mdx2vast
+    exit: 1
+    want: |
       test.mdx:15:19:vale.Redundancy:'ACT test' is redundant
       test.mdx:19:19:vale.Redundancy:'ACT test' is redundant
       test.mdx:25:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
       test.mdx:77:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
       test.mdx:87:16:demo.Raw:Link "[must not use `.html`](../index.html)" must use the .md file extension.
-      """
 
-  Scenario: MDX with comment configuration
-    When I test comments for "test2.mdx"
-    Then the output should contain exactly:
-      """
+  - name: mdx-config
+    args: test2.mdx
+    requires: mdx2vast
+    exit: 1
+    want: |
       test2.mdx:15:19:vale.Redundancy:'ACT test' is redundant
       test2.mdx:19:19:vale.Redundancy:'ACT test' is redundant
       test2.mdx:25:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
       test2.mdx:77:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
       test2.mdx:87:16:demo.Raw:Link "[must not use `.html`](../index.html)" must use the .md file extension.
-      """
 
-  Scenario: Markdown
-    When I test comments for "test.md"
-    Then the output should contain exactly:
-      """
+  - name: markdown
+    args: test.md
+    exit: 1
+    want: |
       test.md:23:19:vale.Redundancy:'ACT test' is redundant
       test.md:33:19:vale.Redundancy:'ACT test' is redundant
       test.md:37:19:vale.Redundancy:'ACT test' is redundant
@@ -50,12 +53,12 @@ Feature: Comments
       test.md:169:19:vale.Redundancy:'ACT test' is redundant
       test.md:169:48:demo.Ending-Preposition:Don't end a sentence with 'for.'
       test.md:171:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
-      """
 
-  Scenario: reStructuredText
-    When I test comments for "test.rst"
-    Then the output should contain exactly:
-      """
+  - name: rst
+    args: test.rst
+    requires: rst2html
+    exit: 1
+    want: |
       test.rst:15:19:vale.Redundancy:'ACT test' is redundant
       test.rst:19:19:vale.Redundancy:'ACT test' is redundant
       test.rst:25:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
@@ -77,27 +80,25 @@ Feature: Comments
       test.rst:101:19:vale.Redundancy:'ACT test' is redundant
       test.rst:101:48:demo.Ending-Preposition:Don't end a sentence with 'for.'
       test.rst:103:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
-      """
 
-  Scenario: AsciiDoc
-    When I test comments for "test.adoc"
-    Then the output should contain exactly:
-      """
+  - name: asciidoc
+    args: test.adoc
+    requires: asciidoctor
+    exit: 1
+    want: |
       test.adoc:15:19:vale.Redundancy:'ACT test' is redundant
       test.adoc:19:19:vale.Redundancy:'ACT test' is redundant
       test.adoc:25:20:demo.Ending-Preposition:Don't end a sentence with 'of.'
-      """
 
-  Scenario: Org Mode
-    When I test comments for "test.org"
-    Then the output should contain exactly:
-      """
+  - name: org
+    args: test.org
+    exit: 1
+    want: |
       test.org:17:21:vale.Redundancy:'ACT test' is redundant
-      """
 
-  Scenario: Inline vale off with inline markup (#1001)
-    When I test comments for "issue1001.md"
-    Then the output should contain exactly:
-      """
+  - name: inline-vale-off
+    about: "#1001"
+    args: issue1001.md
+    exit: 0
+    want: |
       issue1001.md:5:28:demo.Ending-Preposition:Don't end a sentence with 'of.'
-      """

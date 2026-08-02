@@ -1,0 +1,213 @@
+# Scope selectors, and the text each one does and doesn't reach.
+name: scopes
+dir: fixtures/scopes/*
+# `*` above: each case runs in a directory named after it.
+
+cases:
+  - name: negated
+    dir: multi
+    args: .
+    exit: 1
+    want: |
+      test.md:1:29:rules.Negated:'THREE' left in text
+      test.md:1:35:rules.HN:'FOUR' left in text
+      test.md:5:29:rules.HN:'FOUR' left in text
+      test.md:11:20:rules.Negated:'THREE' left in text
+      test.md:11:26:rules.HN:'FOUR' left in text
+      test.md:13:11:rules.Para:Don't use 'paragraph' in a blockquote.
+      test.md:19:1:rules.And:Don't use 'TODO' in a blockquote OR heading.
+
+  - name: raw
+    args: .
+    exit: 1
+    want: |
+      test.md:5:1:rules.Raw:Don't use italics/bolding in a heading.
+      test.md:9:1:rules.Fence:Syntax highlighting hint "```sh " must be one of: yaml, ruby, plaintext, markdown, javascript, shell, golang, python, dockerfile, or typescript.
+      test.py:1:1:rules.Raw:Don't use italics/bolding in a heading.
+
+  - name: blockquote
+    args: .
+    requires: asciidoctor, rst2html
+    exit: 1
+    want: |
+      test.adoc:5:12:rules.Quote:Don't use 'here' in a blockquote.
+      test.md:3:20:rules.Quote:Don't use 'here' in a blockquote.
+      test.rst:3:22:rules.Quote:Don't use 'here' in a blockquote.
+
+  - name: class
+    args: .
+    requires: asciidoctor
+    exit: 0
+    want: |
+      test.adoc:3:4:rules.Class:class scope matched 'widget'
+
+  - name: inline-scopes
+    about: "#1002"
+    dir: inline
+    args: .
+    requires: asciidoctor
+    exit: 0
+    want: |
+      test.adoc:1:27:rules.LinkText:link: 'here'
+      test.adoc:3:10:rules.StrongText:strong: 'urgent'
+      test.adoc:3:31:rules.EmphasisText:emphasis: 'subtle'
+      test.adoc:3:52:rules.CodeText:code: 'deprecated'
+      test.md:1:8:rules.LinkText:link: 'here'
+      test.md:3:11:rules.StrongText:strong: 'urgent'
+      test.md:3:33:rules.EmphasisText:emphasis: 'subtle'
+      test.md:3:54:rules.CodeText:code: 'deprecated'
+      test.md:7:6:rules.StrongText:strong: 'urgent'
+      test.md:7:20:rules.LinkText:link: 'here'
+      test.md:9:13:rules.LinkText:link: 'here'
+      test.md:9:45:rules.LinkText:link: 'here'
+      test.md:11:4:rules.LinkText:link: 'here'
+      test.md:11:42:rules.LinkText:link: 'here'
+      test.md:13:15:rules.StrongText:strong: 'urgent'
+      test.md:13:31:rules.StrongText:strong: 'urgent'
+      test.md:15:14:rules.CodeText:code: 'deprecated'
+      test.md:15:32:rules.CodeText:code: 'deprecated'
+      test.md:17:21:rules.LinkText:link: 'here'
+      test.md:17:48:rules.StrongText:strong: 'urgent'
+      test.md:19:19:rules.LinkText:link: 'here'
+      test.md:23:17:rules.StrongText:strong: 'urgent'
+      test.md:25:17:rules.EmphasisText:emphasis: 'subtle'
+      test.md:28:13:rules.LinkText:link: 'here'
+
+  - name: sentences
+    dir: sentence
+    args: .
+    exit: 0
+    want: |
+      test.md:1:3:rules.Sentence:'Test'
+      test.md:3:1:rules.Sentence:'The controller requires a current of 2 A max.'
+      test.md:4:1:rules.Sentence:'The device’s current support for bluetooth is being deprecated.'
+
+  - name: skip
+    args: .
+    requires: rst2html
+    exit: 0
+    want: |
+      test.md:3:1:vale.Annotations:'TODO' left in text
+      test.rst:20:1:vale.Annotations:'TODO' left in text
+      test.rst:24:1:vale.Annotations:'TODO' left in text
+
+  - name: skip-inline
+    about: "#1052"
+    args: .
+    requires: mdx2vast
+    exit: 0
+    want: ""
+
+  - name: inline-spacing
+    about: "#1111, #1119"
+    dir: inline-space
+    args: .
+    requires: asciidoctor
+    exit: 1
+    want: |
+      test.md:7:1:rules.InlineSpace:Use a non-breaking space before 'd\x{00A0}:'.
+
+  - name: attr
+    args: .
+    requires: asciidoctor, rst2html
+    exit: 0
+    want: |
+      test.adoc:3:16:rules.Alt:alt text should be less than 125 characters.
+      test.md:3:3:rules.Alt:alt text should be less than 125 characters.
+      test.rst:4:10:rules.Alt:alt text should be less than 125 characters.
+
+  - name: inline
+    dir: link
+    args: .
+    requires: asciidoctor, rst2html
+    exit: 1
+    want: |
+      test.adoc:1:34:rules.Link:Don't use '[here]' as the content of a link.
+      test.adoc:5:56:rules.Link:Don't use '[here]' as the content of a link.
+      test.md:3:19:rules.Code:'`XXX`' left in text
+      test.md:5:34:rules.Link:Don't use '[here]' as the content of a link.
+      test.md:7:56:rules.Link:Don't use '[here]' as the content of a link.
+      test.md:9:10:rules.Strong:'TODO' left in text
+      test.md:11:3:rules.Strong:'TODO' left in text
+      test.md:13:6:rules.Code:'`XXX`' left in text
+      test.md:15:1:rules.Code:'`XXX`' left in text
+
+  - name: heading
+    args: .
+    requires: asciidoctor, dita, rst2html, xsltproc
+    exit: 1
+    want: |
+      test.adoc:1:20:rules.Heading:'XXX' left in text
+      test.adoc:1:28:rules.H3:'THREE' left in text
+      test.adoc:3:26:rules.Heading:'TODO' left in text
+      test.adoc:3:31:rules.H2:'TWO' left in text
+      test.adoc:7:27:rules.Heading:'TODO' left in text
+      test.adoc:7:36:rules.H3:'THREE' left in text
+      test.adoc:9:28:rules.Heading:'TODO' left in text
+      test.dita:6:36:rules.Heading:'TODO' left in text
+      test.dita:23:36:rules.Heading:'NOTE' left in text
+      test.html:39:96:rules.Heading:'TODO' left in text
+      test.html:59:99:rules.Heading:'XXX' left in text
+      test.md:1:21:rules.Heading:'XXX' left in text
+      test.md:1:35:rules.HN:'FOUR' left in text
+      test.md:3:5:rules.Heading:'TODO' left in text
+      test.md:3:19:rules.H2:'TWO' left in text
+      test.md:3:29:rules.HN:'FOUR' left in text
+      test.md:9:6:rules.Heading:'TODO' left in text
+      test.md:9:20:rules.H3:'THREE' left in text
+      test.md:9:26:rules.HN:'FOUR' left in text
+      test.md:11:6:rules.MinH2:Headings should have at least 100 characters.
+      test.rst:2:9:rules.Heading:'XXX' left in text
+      test.rst:5:19:rules.Heading:'TODO' left in text
+      test.xml:13:23:rules.Heading:'TODO' left in text
+      test.xml:23:21:rules.Heading:'XXX' left in text
+
+  - name: asciidoc-sectnums
+    about: "#1101"
+    dir: headings-attrs
+    args: .
+    requires: asciidoctor
+    exit: 1
+    want: |
+      test.adoc:1:3:Test.Headings:'document title' should use title-style capitalization.
+      test.adoc:5:4:Test.Headings:'about the document' should use title-style capitalization.
+
+  - name: asciidoc-anchors
+    about: "#1109"
+    dir: adoc-heading-xref
+    args: .
+    requires: asciidoctor
+    exit: 1
+    want: |
+      test.adoc:4:4:Test.Headings:'first heading lowercase' should use title-style capitalization.
+      test.adoc:9:4:Test.Headings:'second heading lowercase' should use title-style capitalization.
+      test.adoc:13:4:Test.Headings:'third heading lowercase' should use title-style capitalization.
+
+  - name: table
+    args: .
+    requires: asciidoctor, rst2html
+    exit: 1
+    want: |
+      test.adoc:9:2:rules.Table:'TODO' left in text
+      test.adoc:15:20:rules.Table:'XXX' left in text
+      test.html:24:69:rules.Table:'TODO' left in text
+      test.md:12:10:rules.Table:'TODO' left in text
+      test.md:20:12:rules.Table:'TODO' left in text
+      test.rst:15:16:rules.Table:'TODO' left in text
+      test.rst:17:3:rules.Table:'XXX' left in text
+
+  - name: list
+    args: .
+    requires: asciidoctor, rst2html
+    exit: 1
+    want: |
+      test.adoc:7:11:rules.List:'TODO' left in text
+      test.adoc:9:11:rules.List:'TODO' left in text
+      test.html:14:12:rules.List:'TODO' left in text
+      test.html:20:12:rules.List:'TODO' left in text
+      test.md:7:3:rules.List:'TODO' left in text
+      test.md:8:3:rules.List:'TODO' left in text
+      test.md:12:4:rules.List:'XXX' left in text
+      test.rst:9:3:rules.List:'TODO' left in text
+      test.rst:10:3:rules.List:'TODO' left in text
+      test.rst:14:4:rules.List:'XXX' left in text

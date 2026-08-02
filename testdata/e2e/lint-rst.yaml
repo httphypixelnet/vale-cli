@@ -1,0 +1,15 @@
+# reStructuredText, against a fixture with its own configuration and styles.
+name: lint/rst
+dir: fixtures/formats/rst
+
+cases:
+  - name: basic
+    args: test.rst
+    requires: rst2html
+    exit: 1
+    want: |
+      test.rst:15:1:Test.Rule:Use 'BIG Needles' rather than 'BIG needles'.
+      test.rst:22:59:Test.Rule:Use 'BIG Needles' rather than 'BIG needles'.
+      test.rst:23:43:Test.Rule:Use 'BIG Needles' rather than 'BIG needles'.
+      test.rst:25:22:Test.Rule:Use 'BIG Needles' rather than 'BIG needles'.
+      test.rst:29:17:Test.Rule:Use 'BIG Needles' rather than 'BIG needles'.

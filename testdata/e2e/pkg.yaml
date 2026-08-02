@@ -1,0 +1,35 @@
+# `vale sync`, against each shape of package.
+name: pkg
+dir: fixtures/pkg
+
+cases:
+  - name: complete
+    dir: complete
+    args: test.md
+    sync: true
+    exit: 1
+    contains: |
+      test.md:11:1:Vale.Spelling:Did you really mean 'peut'?
+      test.md:13:11:v3.MyProduct:Using 'easy' may come across as condescending.
+
+  - name: style-only
+    dir: style
+    args: test.md
+    sync: true
+    exit: 1
+    contains: |
+      test.md:3:5:Vale.Spelling:Did you really mean 'Myproduct'?
+      test.md:7:5:Vale.Spelling:Did you really mean 'Myproduct'?
+      test.md:9:34:write-good.Passive:'be flagged' may be passive voice. Use active voice if you can.
+      test.md:11:1:Vale.Spelling:Did you really mean 'peut'?
+      test.md:13:11:write-good.Weasel:'very' is a weasel word!
+
+  - name: config-only
+    dir: config
+    args: test.md
+    sync: true
+    exit: 1
+    contains: |
+      test.md:3:5:Vale.Spelling:Did you really mean 'Myproduct'?
+      test.md:7:5:Vale.Spelling:Did you really mean 'Myproduct'?
+      test.md:11:1:Vale.Spelling:Did you really mean 'peut'?

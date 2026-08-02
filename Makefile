@@ -9,10 +9,12 @@ CURR_SHA := $(shell git rev-parse --verify HEAD)
 
 LDFLAGS := -ldflags "-s -w -X main.version=$(LAST_TAG)"
 
+EXE := $(if $(filter Windows_NT,$(OS)),.exe,)
+
 DOCKER_BUILD_TARGETS := linux/arm64,linux/amd64
 DOCKER_USER  ?= jdkato
 
-.PHONY: data test lint install rules setup bench compare release choco-cross
+.PHONY: data test lint install rules bench compare release choco-cross
 
 all: build
 
@@ -48,12 +50,13 @@ compare:
 	benchmany -n 10 -o old.txt ${LAST_TAG} && \
 	benchstat old.txt new.txt
 
-setup:
-	cd testdata && bundle install && cd -
-
+# `go test` throws away a passing package's output, which would take the
+# end-to-end progress display with it -- so build that suite and run it
+# directly, and leave the rest to `go test`.
 test:
-	go test ./internal/core ./internal/lint ./internal/check ./internal/nlp ./internal/glob ./cmd/vale
-	cd testdata && cucumber --format progress && cd -
+	go test `go list ./... | grep -v /internal/e2e`
+	go test -c -o bin/e2e.test$(EXE) ./internal/e2e
+	./bin/e2e.test$(EXE) $(run)
 
 docker:
 	@echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
