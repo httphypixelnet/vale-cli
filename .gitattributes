@@ -1,4 +1,10 @@
+# Line endings these fixtures exist to test.
 CRLF.md text eol=crlf
 CR.md text eol=cr
+
+# `internal/lint/code` compares extracted comments against JSON that spells out
+# the line endings it expects, so these have to check out the same everywhere --
+# on Windows, `core.autocrlf` would otherwise rewrite them to CRLF.
+testdata/comments/** text eol=lf
 
 testdata/** linguist-vendored=true
