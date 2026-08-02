@@ -3,6 +3,7 @@ package core
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -284,21 +285,14 @@ func (c *Config) ConfigFile() string {
 }
 
 // Root returns the first configuration file in the list.
+//
+// NOTE: loading records every config file we read -- including the default one
+// -- so an empty list means that we found nothing to read.
 func (c *Config) Root() (string, error) {
 	if len(c.ConfigFiles) > 0 {
 		return c.ConfigFiles[0], nil
 	}
-
-	root, err := DefaultConfig()
-	if err != nil {
-		return "", err
-	}
-
-	if !system.FileExists(root) {
-		return "", fmt.Errorf("no .vale.ini file found")
-	}
-
-	return root, nil
+	return "", errors.New("no .vale.ini file found")
 }
 
 // GetStylesPath returns the last path in the list.

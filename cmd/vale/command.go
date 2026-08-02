@@ -91,14 +91,17 @@ func sync(_ []string, flags *core.CLIFlags) error {
 	cfg, err := core.ReadPipeline(flags, true)
 	if err != nil {
 		return err
-	} else if err = initPath(cfg); err != nil {
-		return err
 	}
 
 	// NOTE: sync should *only* run for a single config file.
+	//
+	// We resolve it before touching the `StylesPath` so that a missing config
+	// reports itself rather than the empty path it leaves behind.
 	rootINI, noRoot := cfg.Root()
 	if noRoot != nil {
 		return core.NewE100("sync", noRoot)
+	} else if err = initPath(cfg); err != nil {
+		return err
 	}
 
 	pkgs, err := core.GetPackages(rootINI)

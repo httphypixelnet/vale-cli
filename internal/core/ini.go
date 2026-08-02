@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -338,7 +337,11 @@ func processSources(cfg *Config, sources []string) (*ini.File, error) {
 	})
 
 	if len(sources) == 0 {
-		return uCfg, errors.New("no sources provided")
+		// A dry run has no sources when the only config file is the default
+		// one, which `sync` resolves later via `Config.Root`.
+		//
+		// Callers that require a config file check for one before we get here.
+		return uCfg, nil
 	} else if len(sources) == 1 {
 		cfg.Flags.Path = sources[0]
 		return shadowLoad(cfg.Flags.Path)

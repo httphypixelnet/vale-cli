@@ -112,9 +112,14 @@ func loadINI(cfg *Config, dry bool) (*ini.File, error) {
 	//
 	// In other words, this config file is *always* loaded and is read after
 	// any other sources to allow for project-agnostic customization.
+	//
+	// A dry run -- i.e., `sync` -- is the exception: it has to run against a
+	// single config file, so we only load this one if it's the only one (see
+	// below).
 	defaultCfg, _ := DefaultConfig()
+	hasDefault := system.FileExists(defaultCfg) && !cfg.Flags.IgnoreGlobal
 
-	if system.FileExists(defaultCfg) && !cfg.Flags.IgnoreGlobal && !dry {
+	if hasDefault && !dry {
 		sources = append(sources, defaultCfg)
 		cfg.Flags.Local = true
 		cfg.AddConfigFile(defaultCfg)
@@ -146,6 +151,12 @@ func loadINI(cfg *Config, dry bool) (*ini.File, error) {
 		// We're using a config file found using a local search process.
 		sources = append(sources, base)
 		cfg.AddConfigFile(base)
+	} else if hasDefault && dry {
+		// The default config is the only one available, so a dry run has to
+		// read it to resolve values such as `StylesPath`.
+		sources = append(sources, defaultCfg)
+		cfg.Flags.Local = true
+		cfg.AddConfigFile(defaultCfg)
 	}
 
 	if StringInSlice(cfg.Flags.AlertLevel, AlertLevels) {
