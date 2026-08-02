@@ -17,6 +17,14 @@ var pathKeys = []string{
 	"StylesPath",
 }
 
+// nonOptKeys are core keys that something other than `coreOpts` reads.
+//
+// They belong at the top level, so they're not a mistake -- they just aren't
+// resolved here. See `GetPackages`.
+var nonOptKeys = []string{
+	"Packages",
+}
+
 // noChildSections disables the ini library's child-section feature.
 //
 // That feature reads a `.` in a section's name as nesting, so `[*.md]` is
@@ -375,6 +383,19 @@ func processConfig(uCfg *ini.File, cfg *Config, dry bool) (*ini.File, error) {
 		} else if _, found = syntaxOpts[k]; found {
 			msg := fmt.Sprintf("'%s' is a syntax-specific option", k)
 			return nil, NewE201FromTarget(msg, k, cfg.RootINI)
+		} else if !StringInSlice(k, nonOptKeys) {
+			// Nothing reads a key we don't recognize here, so leaving it be
+			// quietly means the user's config says something Vale never hears.
+			//
+			// The delimiters include `:`, which is what makes this worth
+			// saying out loud: a URL left on a line of its own parses as the
+			// key `https` with the rest of itself for a value, and the package
+			// it was meant to name is never installed.
+			//
+			// It's a warning rather than an error because a config that has
+			// carried a stale key for years still lints exactly as it did.
+			Warn(fmt.Sprintf(
+				"'%s' isn't a core option; Vale is ignoring it.", k))
 		}
 	}
 

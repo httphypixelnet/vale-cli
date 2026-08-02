@@ -81,6 +81,15 @@ func NewError(code, title, msg string) error {
 	)
 }
 
+// Warn reports something the user should know about but that doesn't stop the
+// run -- a key we don't recognize, say.
+//
+// It goes to stderr to stay clear of `--output=JSON` and the other formats a
+// caller parses, which are written to stdout.
+func Warn(msg string) {
+	fmt.Fprintf(os.Stderr, "%s %s\n", pterm.BgYellow.Sprint("W101"), msg)
+}
+
 // NewE100 creates a new, formatted "unexpected" error.
 //
 // Since E100 errors can occur anywhere, we include a "context" that makes it
