@@ -71,6 +71,26 @@ builds:
       - -s -w -X main.version={{.Version}}
       - -extldflags=-static
 
+  # Windows on ARM builds with llvm-mingw rather than the mingw-w64 that the
+  # amd64 target uses -- the latter has no aarch64 cross-compiler, and cgo
+  # rules out building without one. `goreleaser-cross` keeps it here.
+  - id: vale-windows-arm64
+    main: ./cmd/vale
+    binary: vale
+    goarch:
+      - arm64
+    goos:
+      - windows
+    env:
+      - CC=/llvm-mingw/bin/aarch64-w64-mingw32-gcc
+      - CXX=/llvm-mingw/bin/aarch64-w64-mingw32-g++
+    flags:
+      - -trimpath
+      - -buildmode=exe
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+      - -extldflags=-static
+
 archives:
   - format: tar.gz
     format_overrides:
