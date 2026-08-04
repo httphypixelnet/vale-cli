@@ -177,6 +177,13 @@ func (mgr *Manager) addStyle(path string) error {
 			results[i] = result{skip: true}
 			continue
 		}
+
+		// Nor is one the configuration can never run: `Style.Rule = NO` is
+		// applied in lint.shouldRun, long after the pattern reached the engine.
+		if !mgr.enabledSomewhere(chkName) {
+			results[i] = result{skip: true}
+			continue
+		}
 		results[i].chkName = chkName
 
 		wg.Add(1)
@@ -398,6 +405,55 @@ func (mgr *Manager) loadVocabRules() {
 func (mgr *Manager) hasStyle(name string) bool {
 	styles := append(mgr.styles, defaultStyles...) //nolint:gocritic
 	return core.StringInSlice(name, styles)
+}
+
+// enabledSomewhere reports whether any part of the configuration could run the
+// named rule, mirroring lint.shouldRun ahead of compiling.
+//
+// Compiling is the expensive half of loading a rule, and `Style.Rule = NO` was
+// applied long after it. The test errs toward compiling, and nothing
+// downstream can make a skip wrong: in-text comments only disable, and
+// `--filter` selects from what the ini already loaded.
+func (mgr *Manager) enabledSomewhere(name string) bool {
+	cfg := mgr.Config
+	style := core.StyleName(name)
+
+	// Named on: decides wherever it is set, BasedOnStyles or not.
+	for _, sec := range cfg.SChecks {
+		if val, ok := checkSetting(sec, name, style); ok && val {
+			return true
+		}
+	}
+	if val, ok := checkSetting(cfg.GChecks, name, style); ok {
+		return val
+	}
+
+	// Otherwise it runs where its style is based on, unless that same section
+	// switches it off.
+	if core.StringInSlice(style, cfg.GBaseStyles) {
+		return true
+	}
+	for sec, styles := range cfg.SBaseStyles {
+		if !core.StringInSlice(style, styles) {
+			continue
+		}
+		if val, ok := checkSetting(cfg.SChecks[sec], name, style); ok && !val {
+			continue
+		}
+		return true
+	}
+
+	return false
+}
+
+// checkSetting reads a rule's setting, falling back to its style's -- the
+// precedence lint.lookup uses for the same question at lint time.
+func checkSetting(settings map[string]bool, rule, style string) (bool, bool) {
+	if val, ok := settings[rule]; ok {
+		return val, true
+	}
+	val, ok := settings[style]
+	return val, ok
 }
 
 func (mgr *Manager) needsStyle(name string) bool {
