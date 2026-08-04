@@ -11,7 +11,6 @@ import (
 )
 
 var orgConverter = org.New()
-var orgWriter = org.NewHTMLWriter()
 
 var orgExample = "\n#+BEGIN_EXAMPLE\n$1\n#+END_EXAMPLE\n"
 
@@ -30,8 +29,11 @@ func (w *ExtendedHTMLWriter) WriteComment(n org.Comment) {
 }
 
 func (l *Linter) lintOrg(f *core.File) error {
-	extendedWriter := &ExtendedHTMLWriter{orgWriter}
-	orgWriter.ExtendingWriter = extendedWriter
+	// A writer per file: `org.HTMLWriter` accumulates its output in an embedded
+	// `strings.Builder` that nothing resets, so a shared one hands each file
+	// every earlier file's HTML as well. See #1129.
+	writer := org.NewHTMLWriter()
+	writer.ExtendingWriter = &ExtendedHTMLWriter{writer}
 
 	old := f.Content
 
@@ -61,7 +63,7 @@ func (l *Linter) lintOrg(f *core.File) error {
 	// so we clear the outline.
 	doc.Outline.Children = nil
 
-	html, err := doc.Write(orgWriter)
+	html, err := doc.Write(writer)
 	if err != nil {
 		return err
 	}

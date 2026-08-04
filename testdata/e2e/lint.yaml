@@ -55,6 +55,37 @@ cases:
       test.org:17:4:vale.Annotations:'TODO' left in text
       test.org:50:18:vale.Annotations:'TODO' left in text
 
+  - name: org-cross-file
+    about: |
+      #1129: a shared HTML writer carried each Org file's markup into the next,
+      so a heading in one file was reported against a later one too.
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.org]
+        BasedOnStyles = Test
+      styles/Test/Heading.yml: |
+        extends: existence
+        message: "Found '%s'."
+        level: warning
+        scope: heading
+        tokens:
+          - Hello World
+      a.org: |
+        #+title: A
+
+        * Hello World
+      b.org: |
+        #+title: B
+
+        HelloWorld
+    args: a.org b.org
+    exit: 0
+    want: |
+      a.org:3:3:Test.Heading:Found 'Hello World'.
+
   - name: dita
     args: test.dita
     requires: dita
