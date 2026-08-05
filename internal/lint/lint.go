@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -324,10 +325,101 @@ func (l *Linter) lintLines(f *core.File) error {
 	return l.lintBlock(f, block, len(f.Lines), 0, true)
 }
 
+// concurrentKinds names the extension points whose Run reads nothing but the
+// block it is given.
+//
+// The rest reach into the file: `consistency` and `conditional` accumulate
+// matches on it, `sequence` tags through a cache it owns, `metric` reads its
+// counts, and `spelling` holds a dictionary of its own. Those keep the serial
+// pass.
+var concurrentKinds = map[string]bool{
+	"capitalization": true,
+	"existence":      true,
+	"occurrence":     true,
+	"readability":    true,
+	"repetition":     true,
+	"script":         true,
+	"substitution":   true,
+}
+
+// blockWorkers bounds rule concurrency across the whole run, not per block:
+// files are already linted in parallel, and a pool per block would multiply by
+// however many are in flight.
+var blockWorkers = make(chan struct{}, runtime.GOMAXPROCS(0))
+
+// parallelFloor is the block size below which running rules concurrently costs
+// more than it saves. A variable so a test can force either path over the same
+// input.
+var parallelFloor = 4096
+
 // lintBlock runs every applicable rule over blk.
+//
+// Rules that only read the block run concurrently; the rest run in order
+// afterwards. Alerts are added in rule order either way, so which rule wins a
+// span, and what `ChkToCtx` holds when a later one is formatted, do not depend
+// on the scheduler.
 func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool) error {
 	f.ChkToCtx = make(map[string]string)
-	for _, r := range l.inScopeFor(blk) {
+
+	rules := l.inScopeFor(blk)
+
+	// Below the floor the bookkeeping concurrency needs -- two slices the
+	// length of the rule set, per block -- costs more than the rules do. Most
+	// blocks are a paragraph.
+	if len(blk.Text) < parallelFloor {
+		return l.lintBlockSerial(f, blk, rules, lines, pad, lookup)
+	}
+
+	found := make([][]core.Alert, len(rules))
+	wanted := make([]bool, len(rules))
+
+	var todo []int
+	for i, r := range rules {
+		if !l.shouldRun(r.name, f, r.rule) {
+			continue
+		}
+		wanted[i] = true
+		if concurrentKinds[r.rule.Fields().Extends] {
+			todo = append(todo, i)
+		}
+	}
+
+	if err := l.runConcurrently(f, blk, rules, todo, found); err != nil {
+		return err
+	}
+
+	for i, r := range rules {
+		if !wanted[i] || found[i] != nil {
+			continue
+		}
+		alerts, err := r.rule.Run(blk, f, l.Manager.Config)
+		if err != nil {
+			return err
+		}
+		found[i] = alerts
+	}
+
+	for i, r := range rules {
+		if !wanted[i] {
+			continue
+		}
+		info := r.rule.Fields()
+		for j := range found[i] {
+			if f.QueryComments(r.name + "[" + found[i][j].Match + "]") {
+				continue
+			}
+			core.FormatAlert(&found[i][j], info.Limit, info.Level, r.name)
+			f.AddAlert(found[i][j], blk, lines, pad, lookup)
+		}
+	}
+
+	return nil
+}
+
+// lintBlockSerial is lintBlock without the concurrency, and without what it
+// costs to set up.
+func (l *Linter) lintBlockSerial(f *core.File, blk nlp.Block, rules []scopedRule, lines, pad int, lookup bool) error {
+	for _, r := range rules {
 		name, chk := r.name, r.rule
 		if !l.shouldRun(name, f, chk) {
 			continue
@@ -349,6 +441,47 @@ func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup b
 	}
 
 	return nil
+}
+
+// runConcurrently fills found[i] for each rule named in todo.
+//
+// An empty result is stored as a non-nil slice so the serial pass can tell a
+// rule that ran and found nothing from one it has yet to run.
+func (l *Linter) runConcurrently(f *core.File, blk nlp.Block, rules []scopedRule, todo []int, found [][]core.Alert) error {
+	if len(todo) < 2 {
+		return nil
+	}
+
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		failed error
+	)
+
+	for _, i := range todo {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			blockWorkers <- struct{}{}
+			defer func() { <-blockWorkers }()
+
+			alerts, err := rules[i].rule.Run(blk, f, l.Manager.Config)
+			if alerts == nil {
+				alerts = []core.Alert{}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil && failed == nil {
+				failed = err
+			}
+			found[i] = alerts
+		}(i)
+	}
+
+	wg.Wait()
+
+	return failed
 }
 
 // lookup reads a setting given for a rule, falling back to one given for the

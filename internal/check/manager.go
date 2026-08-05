@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -124,6 +125,19 @@ func (mgr *Manager) AssignNLP(f *core.File) nlp.Info {
 	}
 }
 
+// compileGCPercent is the collector target held during rule compilation. It
+// costs about 40 MB of peak heap on a 550-rule style.
+const compileGCPercent = 800
+
+// maxCompileWorkers is where compiling stops going faster. Past it the workers
+// contend for the allocator rather than the CPU, and a ninth adds processor
+// time without taking wall clock off.
+const maxCompileWorkers = 4
+
+func compileWorkers() int {
+	return min(maxCompileWorkers, runtime.GOMAXPROCS(0))
+}
+
 func (mgr *Manager) addStyle(path string) error {
 	// Compiling a rule is the expensive half of loading one -- parsing the
 	// YAML and, mostly, handing its patterns to the regular-expression engine,
@@ -164,8 +178,14 @@ func (mgr *Manager) addStyle(path string) error {
 
 	results := make([]result, len(sources))
 
+	// Compiling allocates hard enough that the collector, not the CPU, decides
+	// how fast this goes: at the default target it is a third of the phase's
+	// processor time and holds the speedup to under two cores of eight. The
+	// burst is bounded, so the target is raised for it and restored after.
+	defer debug.SetGCPercent(debug.SetGCPercent(compileGCPercent))
+
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	sem := make(chan struct{}, compileWorkers())
 
 	for i, src := range sources {
 		style := filepath.Base(filepath.Dir(src.path))
