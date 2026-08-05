@@ -67,10 +67,14 @@ func NewSubstitution(cfg *core.Config, generic baseCheck, path string) (Substitu
 		return len(terms[p]) > len(terms[q])
 	})
 
+	shared := sharedLookaround(terms)
+
 	replacements := []string{}
 	for _, regexstr := range terms {
 		rule.msgMap = append(rule.msgMap, regexstr)
 		replacement := rule.Swap[regexstr]
+
+		regexstr = strings.TrimPrefix(regexstr, shared)
 
 		opens := strings.Count(regexstr, "(")
 		if opens != strings.Count(regexstr, "(?")+strings.Count(regexstr, `\(`) {
@@ -84,7 +88,11 @@ func NewSubstitution(cfg *core.Config, generic baseCheck, path string) (Substitu
 		replacements = append(replacements, replacement)
 	}
 
-	regex = fmt.Sprintf(regex, strings.TrimRight(tokens, "|"))
+	tokens = strings.TrimRight(tokens, "|")
+	if shared != "" {
+		tokens = shared + `(?:` + tokens + `)`
+	}
+	regex = fmt.Sprintf(regex, tokens)
 
 	re, err = rx.Compile(regex)
 	if err != nil {
@@ -94,6 +102,55 @@ func NewSubstitution(cfg *core.Config, generic baseCheck, path string) (Substitu
 	rule.pattern = re
 	rule.repl = replacements
 	return rule, nil
+}
+
+// sharedLookaround returns a leading lookaround every term begins with.
+//
+// A lookaround is zero-width, so asserting it once ahead of the alternation is
+// the same as asserting it in every branch -- and costs one evaluation per
+// position instead of one per term. Nothing capturing is hoisted, so the group
+// numbers the replacements are keyed on stay put.
+func sharedLookaround(terms []string) string {
+	if len(terms) < 2 {
+		return ""
+	}
+
+	lead := leadingGroup(terms[0])
+	if lead == "" || strings.Count(lead, "(") != strings.Count(lead, "(?")+strings.Count(lead, `\(`) {
+		return ""
+	}
+
+	for _, t := range terms[1:] {
+		if !strings.HasPrefix(t, lead) {
+			return ""
+		}
+	}
+
+	return lead
+}
+
+// leadingGroup returns the lookaround expr opens with, brackets included.
+func leadingGroup(expr string) string {
+	if !strings.HasPrefix(expr, "(?=") && !strings.HasPrefix(expr, "(?!") &&
+		!strings.HasPrefix(expr, "(?<=") && !strings.HasPrefix(expr, "(?<!") {
+		return ""
+	}
+
+	depth := 0
+	for i := 0; i < len(expr); i++ {
+		switch expr[i] {
+		case '\\':
+			i++
+		case '(':
+			depth++
+		case ')':
+			if depth--; depth == 0 {
+				return expr[:i+1]
+			}
+		}
+	}
+
+	return ""
 }
 
 // Run executes the `substitution`-based rule.

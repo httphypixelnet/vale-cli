@@ -100,6 +100,78 @@ func TestRegex(t *testing.T) {
 	}
 }
 
+func TestSharedLookaround(t *testing.T) {
+	tests := []struct {
+		name  string
+		terms []string
+		want  string
+	}{
+		{"hoisted", []string{`(?<=\b(?:have|has)\s)went\b`, `(?<=\b(?:have|has)\s)ate\b`},
+			`(?<=\b(?:have|has)\s)`},
+		{"differing assertions", []string{`(?<=have\s)went\b`, `(?<=has\s)ate\b`}, ""},
+		{"one term", []string{`(?<=have\s)went\b`}, ""},
+		{"no assertion", []string{`went\b`, `ate\b`}, ""},
+		{"not leading", []string{`a(?=b)`, `a(?=c)`}, ""},
+		{"capturing", []string{`(?<=(have)\s)went`, `(?<=(have)\s)ate`}, ""},
+		{"escaped paren inside", []string{`(?<=\)\s)went`, `(?<=\)\s)ate`}, `(?<=\)\s)`},
+	}
+
+	for _, tt := range tests {
+		if got := sharedLookaround(tt.terms); got != tt.want {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// Hoisting must not change which term matched, since the replacement is keyed
+// on the group number.
+func TestHoistKeepsReplacements(t *testing.T) {
+	swap := map[string]interface{}{
+		"extends":    "substitution",
+		"name":       "Vale.Tense",
+		"level":      "error",
+		"message":    "Use '%s' instead of '%s'.",
+		"scope":      "text",
+		"ignorecase": true,
+		"nonword":    true,
+		"swap": map[string]string{
+			`(?<=\b(?:have|has)\s)went\b`: "gone",
+			`(?<=\b(?:have|has)\s)ate\b`:  "eaten",
+		},
+	}
+
+	rule, err := makeSubstitution(swap)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for text, want := range map[string]string{
+		"they have went home": "Use 'gone' instead of 'went'.",
+		"they have ate lunch": "Use 'eaten' instead of 'ate'.",
+	} {
+		alerts, rerr := rule.Run(nlp.NewBlock(text, text, "text"), &core.File{}, &core.Config{})
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		if len(alerts) != 1 {
+			t.Fatalf("%q: got %d alerts, want 1", text, len(alerts))
+		}
+		if alerts[0].Message != want {
+			t.Errorf("%q: got %q, want %q", text, alerts[0].Message, want)
+		}
+	}
+
+	// The assertion still has to hold once hoisted.
+	alerts, err := rule.Run(nlp.NewBlock("they went home", "they went home", "text"),
+		&core.File{}, &core.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alerts) != 0 {
+		t.Fatalf("matched without the auxiliary: %+v", alerts)
+	}
+}
+
 func TestRegexEscapedParens(t *testing.T) {
 	swap := map[string]interface{}{
 		"extends":    "substitution",
