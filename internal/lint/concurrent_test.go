@@ -26,6 +26,7 @@ func sample() string {
 	for i := range 40 {
 		fmt.Fprintf(&b, "Use your cellphone or your smart phone to reachout (%d). ", i)
 		b.WriteString("The abandonment of the plan was intentional; ")
+		//nolint:dupword // the repeat is what Vale.Repetition fires on
 		b.WriteString("we will utilize the mispelled word and and repeat it.\n\n")
 	}
 	return b.String()
