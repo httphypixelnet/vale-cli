@@ -33,6 +33,7 @@ var blockDelimiters = map[string]string{
 	".md":   "\n```\n$1\n```\n",
 	".mdx":  "\n```\n$1\n```\n",
 	".myst": "\n```\n$1\n```\n",
+	".qmd":  "\n```\n$1\n```\n",
 	".rst":  "\n::\n\n%s\n",
 	".org":  orgExample,
 }
@@ -86,6 +87,7 @@ var inlineDelimiters = map[string]string{
 	".md":   "`$1`",
 	".mdx":  "`$1`",
 	".myst": "`$1`",
+	".qmd":  "`$1`",
 	".rst":  "``$1``",
 	".org":  "=$1=",
 }

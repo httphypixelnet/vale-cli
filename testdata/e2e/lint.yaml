@@ -225,6 +225,60 @@ cases:
       - FIXME
       - NOTE
 
+  - name: quarto
+    about: "#793 -- fenced divs, attributes, and shortcodes are markup, div
+      content is linted, and code cells stay skipped, options and all"
+    args: test.qmd
+    exit: 0
+    want: |
+      test.qmd:12:19:vale.Annotations:'TODO' left in text
+      test.qmd:23:23:vale.Annotations:'XXX' left in text
+      test.qmd:25:22:vale.Annotations:'TODO' left in text
+      test.qmd:29:23:vale.Annotations:'XXX' left in text
+      test.qmd:35:26:vale.Annotations:'TODO' left in text
+      test.qmd:45:25:vale.Annotations:'XXX' left in text
+      test.qmd:50:60:vale.Annotations:'TODO' left in text
+      test.qmd:53:9:vale.Annotations:'XXX' left in text
+    absent:
+      - FIXME
+      - NOTE
+
+  - name: quarto-callout-scope
+    about: a fenced div's classes scope its content, so a rule can target a
+      callout by name
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.qmd]
+        BasedOnStyles = T
+      styles/T/InCallout.yml: |
+        extends: existence
+        message: "'%s' in a callout"
+        level: error
+        nonword: true
+        scope: class.callout-note
+        raw:
+          - ZQX
+      test.qmd: |
+        A paragraph with ZQX is not matched.
+
+        ::: {.callout-note}
+        First callout paragraph with ZQX.
+
+        Second callout paragraph with ZQX too.
+        :::
+
+        ::: {.callout-tip}
+        A different callout with ZQX.
+        :::
+    args: test.qmd
+    exit: 1
+    want: |
+      test.qmd:4:30:T.InCallout:'ZQX' in a callout
+      test.qmd:6:31:T.InCallout:'ZQX' in a callout
+
   - name: myst-mapped
     about: a Markdown file opts into MyST with `[formats] md = myst`, and a
       directive's name scopes its content as a class

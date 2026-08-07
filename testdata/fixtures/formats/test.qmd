@@ -1,0 +1,53 @@
+---
+title: "Analysis Report"
+author: Jane Doe
+format:
+  html:
+    toc: true
+bibliography: refs.bib
+---
+
+## Overview {#sec-overview-NOTE}
+
+Body prose with a TODO in it, before any cell.
+
+```{r}
+#| label: fig-plot
+#| fig-cap: "A FIXME in an option"
+plot(cars)  # NOTE in code
+```
+
+The mean is `r mean(x)` and `{python} 1 + 1 # FIXME` inline.
+
+::: {.callout-note}
+Callout prose with an XXX in it.
+
+- A list item with a TODO in it.
+:::
+
+::: {.callout-warning title="A FIXME in a title"}
+Warning prose with an XXX in it.
+:::
+
+:::: {.columns}
+
+::: {.column width="40%"}
+Left column prose with a TODO in it.
+:::
+
+::: {.column width="60%"}
+Right column prose.
+:::
+
+::::
+
+::: aside
+A bare-word div with an XXX in it.
+:::
+
+{{< video https://example.com/FIXME.mp4 >}}
+
+Press {{< kbd FIXME >}} to run, then read the prose with a TODO after it.
+
+Prose with [styled text]{.FIXME} keeps its text but not its attributes, and
+a final XXX in it.
