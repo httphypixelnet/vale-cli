@@ -191,6 +191,19 @@ cases:
       test.md:44:5:vale.Annotations:'TODO' left in text
       test.md:46:3:vale.Annotations:'TODO' left in text
 
+  - name: rmarkdown
+    about: .Rmd is Markdown out of the box -- knitr chunk fences and inline
+      `r` spans are code, and everything else lints as prose
+    args: test.Rmd
+    exit: 0
+    want: |
+      test.Rmd:19:47:vale.Annotations:'TODO' left in text
+      test.Rmd:35:25:vale.Annotations:'XXX' left in text
+      test.Rmd:52:23:vale.Annotations:'TODO' left in text
+      test.Rmd:58:32:vale.Annotations:'NOTE' left in text
+    absent:
+      - FIXME
+
   - name: assigned-ext
     about: --ext overrides the extension
     args: "--ext=.md test.xyz"

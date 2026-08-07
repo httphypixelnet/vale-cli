@@ -1,0 +1,59 @@
+---
+title: "Quarterly Report"
+author: "Jane Doe"
+date: "2026-08-07"
+output:
+  html_document:
+    toc: true
+    fig_caption: true
+bibliography: refs.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+library(ggplot2) # FIXME: only loaded for the appendix plots
+```
+
+# Overview
+
+This report summarizes the quarterly numbers, TODO confirm the cutoff date.
+
+We read the raw data and clean it:
+
+```{r load-data, message=FALSE}
+raw <- read.csv("data/q2.csv")
+# FIXME: drop the sentinel rows before release
+clean <- raw[raw$value >= 0, ]
+```
+
+The clean set has `r nrow(clean)` rows and `r ncol(clean)` columns, and the
+running total is `r sum(clean$value) # FIXME`.
+
+## Methods
+
+1. Fit the model with `lm()`.
+2. Check the residuals; XXX flag outliers by hand for now.
+3. Report $R^2$ and the fitted coefficients.
+
+> Estimates below the detection limit are shown as `<LOD`.
+
+```{r model, echo=FALSE, fig.cap="Fitted values against residuals."}
+fit <- lm(value ~ month, data = clean)
+plot(fit, which = 1) # XXX: swap for a ggplot version
+```
+
+## Results
+
+| Month | Value |
+|-------|-------|
+| May   | 12.4  |
+| June  | 13.1  |
+
+Table: Monthly means, TODO confirm the June figure.
+
+The slope is `r round(coef(fit)[2], 2)` per month, in line with earlier
+work [@smith2021].
+
+::: {.callout-note}
+These are preliminary figures; NOTE the caveats in the appendix.
+:::
