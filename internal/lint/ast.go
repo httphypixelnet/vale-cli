@@ -274,7 +274,10 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			// tagging are each switched on only if some rule asks for that scope,
 			// and with all three off this reduces to the lintBlock call it
 			// replaced.
-			if err := l.lintProse(f, b, state.lines); err != nil {
+			//
+			// Prose, but not paragraphs: a rule scoped to `paragraph` must not
+			// reach a heading or a table cell. See #1132.
+			if err := l.lintProse(f, b, state.lines, false); err != nil {
 				return err
 			}
 			return l.lintInline(f, state, b, state.lines, shift)
@@ -283,8 +286,13 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 
 	f.Summary.WriteString(txt + "\n\n")
 
+	// Counted here, and not from the summary: quotes and list items share the
+	// summary so that readability metrics see all of a document's prose, but
+	// `paragraphs` means what the `paragraph` scope reaches -- this branch.
+	f.Metrics["paragraphs"]++
+
 	b := state.block(txt, withClasses("text", state)+f.MetaScope+f.RealExt)
-	if err := l.lintProse(f, b, state.lines); err != nil {
+	if err := l.lintProse(f, b, state.lines, true); err != nil {
 		return err
 	}
 	return l.lintInline(f, state, b, state.lines, 0)

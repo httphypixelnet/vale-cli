@@ -283,8 +283,12 @@ func (l *Linter) lintFile(src string) lintResult {
 	return lintResult{file, err}
 }
 
-func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int) error {
-	blks, err := f.NLP.Compute(&blk)
+// lintProse segments blk and runs every applicable rule over the results.
+//
+// split says whether blk holds paragraphs; a heading or a list item is prose,
+// but not a paragraph. See nlp.Info.Compute.
+func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int, split bool) error {
+	blks, err := f.NLP.Compute(&blk, split)
 	if err != nil {
 		return core.NewE100("NLP.Compute", err)
 	}
@@ -317,7 +321,7 @@ func (l *Linter) lintProse(f *core.File, blk nlp.Block, lines int) error {
 
 func (l *Linter) lintTxt(f *core.File) error {
 	block := nlp.NewBlock("", f.Content, "text"+f.MetaScope+f.RealExt)
-	return l.lintProse(f, block, len(f.Lines))
+	return l.lintProse(f, block, len(f.Lines), true)
 }
 
 func (l *Linter) lintLines(f *core.File) error {

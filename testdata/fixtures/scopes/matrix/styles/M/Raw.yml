@@ -1,0 +1,7 @@
+extends: existence
+message: raw
+level: error
+nonword: true
+scope: raw
+raw:
+  - QRAW

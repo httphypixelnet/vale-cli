@@ -1,0 +1,7 @@
+extends: existence
+message: table.cell
+level: error
+nonword: true
+scope: table.cell
+raw:
+  - QTBC

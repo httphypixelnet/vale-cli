@@ -1,0 +1,7 @@
+extends: existence
+message: sentence
+level: error
+nonword: true
+scope: sentence
+raw:
+  - QSEN

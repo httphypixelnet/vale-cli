@@ -222,7 +222,6 @@ func (f *File) ComputeMetrics() (map[string]interface{}, error) {
 
 	params["complex_words"] = doc.NumComplexWords
 	params["long_words"] = doc.NumLongWords
-	params["paragraphs"] = doc.NumParagraphs - 1
 	params["sentences"] = doc.NumSentences
 	params["characters"] = doc.NumCharacters
 	params["words"] = doc.NumWords

@@ -1,0 +1,7 @@
+extends: existence
+message: code
+level: error
+nonword: true
+scope: code
+raw:
+  - QCOD

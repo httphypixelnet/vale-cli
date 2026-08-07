@@ -1,0 +1,7 @@
+extends: existence
+message: heading
+level: error
+nonword: true
+scope: heading
+raw:
+  - QHED

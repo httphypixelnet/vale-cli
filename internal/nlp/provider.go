@@ -122,7 +122,12 @@ type Info struct {
 // The default implementation is the pure-Go prose library, but the goal is to
 // allow (fairly) seamless integration with non-Go libraries too (such as
 // spaCy).
-func (n *Info) Compute(block *Block) ([]Block, error) {
+//
+// split says whether block holds paragraphs: only then does splitting apply.
+// Headings, list items, and table cells are segmented into sentences like any
+// other prose, but they are not paragraphs, and a rule scoped to `paragraph`
+// must not reach them. See #1132.
+func (n *Info) Compute(block *Block, split bool) ([]Block, error) {
 	seg := SentenceTokenizer.Segment
 	if n.Endpoint != "" && n.Lang != "en" {
 		// We only use external segmentation for non-English text since prose
@@ -135,7 +140,7 @@ func (n *Info) Compute(block *Block) ([]Block, error) {
 			return ret.Sents
 		}
 	}
-	return n.doNLP(block, seg)
+	return n.doNLP(block, seg, split)
 }
 
 // offsetOf locates piece within blk.Text and returns its offset in blk's
@@ -162,14 +167,14 @@ func offsetOf(blk *Block, base int, piece string, cursor *int) int {
 	return base + start
 }
 
-func (n *Info) doNLP(blk *Block, seg segmenter) ([]Block, error) {
+func (n *Info) doNLP(blk *Block, seg segmenter, split bool) ([]Block, error) {
 	blks := []Block{}
 
 	ctx := blk.Context
 	idx := blk.Line
 	base := blk.resolveOffset()
 
-	if n.Splitting {
+	if n.Splitting && split {
 		cursor := 0
 		for _, p := range strings.SplitAfter(blk.Text, "\n\n") {
 			b := NewLinedBlock(ctx, p, "paragraph."+blk.Scope, idx)

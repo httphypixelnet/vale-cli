@@ -1,0 +1,8 @@
+extends: metric
+message: "counts: %s"
+
+# Weighting each metric by a different power of ten makes the reported value
+# spell out every count on its own: 221 = 2 H2s, 2 list items, 1 blockquote.
+formula: heading.h2 * 100 + list * 10 + blockquote
+
+condition: "> 0"

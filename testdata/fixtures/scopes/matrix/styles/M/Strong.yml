@@ -1,0 +1,7 @@
+extends: existence
+message: strong
+level: error
+nonword: true
+scope: strong
+raw:
+  - QSTR

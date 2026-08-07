@@ -1,0 +1,43 @@
+# The document metrics behind `ls-metrics` and every `metric` rule: what each
+# one counts, and which text it counts.
+name: metrics
+dir: fixtures/metrics/*
+
+cases:
+  - name: markdown
+    about: paragraphs counts what the `paragraph` scope reaches -- body
+      paragraphs alone -- while words and sentences take in every kind of
+      prose, and each other element is counted under its own name
+    args: ls-metrics test.md
+    exit: 0
+    want: |
+      {
+          "blockquote": 1,
+          "characters": 113,
+          "complex_words": 4,
+          "heading_h1": 1,
+          "heading_h2": 2,
+          "heading_h3": 1,
+          "list": 2,
+          "long_words": 6,
+          "paragraphs": 3,
+          "polysyllabic_words": 5,
+          "sentences": 7,
+          "syllables": 40,
+          "words": 25
+      }
+
+  - name: text
+    about: metrics come from the markup walker, so a plain-text file has none
+    args: ls-metrics test.txt
+    exit: 0
+    want: |
+      {}
+
+  - name: formula
+    about: a `metric` rule reads the same counts -- the weighted total spells
+      them out, so 221 means 2 H2s, 2 list items, and 1 blockquote
+    args: .
+    exit: 0
+    want: |
+      test.md:1:1:M.Counts:counts: 221.00

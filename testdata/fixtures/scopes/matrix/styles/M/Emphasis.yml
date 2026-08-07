@@ -1,0 +1,7 @@
+extends: existence
+message: emphasis
+level: error
+nonword: true
+scope: emphasis
+raw:
+  - QEMP

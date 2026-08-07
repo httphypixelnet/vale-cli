@@ -1,0 +1,7 @@
+extends: existence
+message: blockquote
+level: error
+nonword: true
+scope: blockquote
+raw:
+  - QBQT

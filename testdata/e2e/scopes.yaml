@@ -17,6 +17,47 @@ cases:
       test.md:13:11:rules.Para:Don't use 'paragraph' in a blockquote.
       test.md:19:1:rules.And:Don't use 'TODO' in a blockquote OR heading.
 
+  - name: paragraph
+    about: "#1132 -- headings, table cells, list items, blockquotes, and
+      frontmatter are not paragraphs"
+    args: .
+    exit: 1
+    want: |
+      test.md:6:16:T.Para:'ZQX' in a paragraph
+
+  - name: matrix
+    about: one rule per scope over one document holding every element, so the
+      full output says exactly which text each scope does and doesn't reach
+    args: .
+    exit: 1
+    want: |
+      test.md:3:69:M.Raw:raw
+      test.md:6:21:M.Paragraph:paragraph
+      test.md:6:26:M.Sentence:sentence
+      test.md:6:76:M.Raw:raw
+      test.md:6:122:M.Sentence:sentence
+      test.md:6:131:M.Paragraph:paragraph
+      test.md:8:27:M.Sentence:sentence
+      test.md:8:32:M.Heading:heading
+      test.md:8:77:M.Raw:raw
+      test.md:10:15:M.Sentence:sentence
+      test.md:10:25:M.TableHeader:table.header
+      test.md:10:45:M.Raw:raw
+      test.md:12:13:M.Sentence:sentence
+      test.md:12:28:M.TableCell:table.cell
+      test.md:12:43:M.Raw:raw
+      test.md:14:24:M.Sentence:sentence
+      test.md:14:44:M.List:list
+      test.md:14:54:M.Raw:raw
+      test.md:16:24:M.Sentence:sentence
+      test.md:16:49:M.Blockquote:blockquote
+      test.md:16:54:M.Raw:raw
+      test.md:18:24:M.Link:link
+      test.md:18:61:M.Strong:strong
+      test.md:18:79:M.Emphasis:emphasis
+      test.md:18:98:M.Code:code
+      test.md:18:119:M.Paragraph:paragraph
+
   - name: raw
     args: .
     exit: 1

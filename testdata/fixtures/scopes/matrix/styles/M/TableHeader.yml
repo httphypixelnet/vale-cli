@@ -1,0 +1,7 @@
+extends: existence
+message: table.header
+level: error
+nonword: true
+scope: table.header
+raw:
+  - QTBH

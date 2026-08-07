@@ -1,0 +1,7 @@
+extends: existence
+message: paragraph
+level: error
+nonword: true
+scope: paragraph
+raw:
+  - QPAR

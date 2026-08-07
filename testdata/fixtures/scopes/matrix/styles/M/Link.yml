@@ -1,0 +1,7 @@
+extends: existence
+message: link
+level: error
+nonword: true
+scope: link
+raw:
+  - QLNK
