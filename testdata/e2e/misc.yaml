@@ -110,6 +110,40 @@ cases:
       test2.md:2:24:demo.Fancy:Change
       test2.md:2:40:write-good.E-Prime:Avoid using "there's"
 
+  - name: issue-1007
+    about: "#1007 -- a term repeated later in the frontmatter or a blockquote
+      doesn't pull the alert off its first occurrence, and every occurrence
+      is reported"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+        Vocab = test-vocab
+
+        [*.md]
+        BasedOnStyles = Vale
+      styles/config/vocabularies/test-vocab/accept.txt: |
+        CASTLE
+      front.md: |
+        ---
+        title: castle
+        tags: ['castle', 'gitlab', 'sonarqube']
+        weight: 8
+        ---
+
+        ## Intro
+
+        Hello, I love a CASTLE.
+      quote.md: |
+        > Hello, I love a castle.
+        > It's castle!
+    args: front.md quote.md
+    exit: 1
+    want: |
+      front.md:2:8:Vale.Terms:Use 'CASTLE' instead of 'castle'.
+      quote.md:1:19:Vale.Terms:Use 'CASTLE' instead of 'castle'.
+      quote.md:2:8:Vale.Terms:Use 'CASTLE' instead of 'castle'.
+
   - name: nested-markup
     dir: misc/markup
     args: .
