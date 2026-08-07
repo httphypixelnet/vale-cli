@@ -31,6 +31,11 @@ type Alert struct {
 	Limit          int      `json:"-"` // the max times to report
 	Hide           bool     `json:"-"` // should we hide this alert?
 	HasByteOffsets bool     `json:"-"` // Span holds byte offsets into the raw document
+
+	// skipOcc is how many acceptable occurrences of Match precede this one
+	// within its block, so the locate-by-search can skip exactly that many
+	// rather than land on the first.
+	skipOcc int
 }
 
 // FormatAlert ensures that all required fields have data.

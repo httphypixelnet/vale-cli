@@ -26,8 +26,11 @@ func isPunctOnly(s string) bool {
 // other checks) normalize `’` -> `'` etc. before matching, so the resulting
 // match must still be locatable in the original, un-normalized source. See
 // #1003.
-// literalFirst finds the first occurrence of sub in ctx that the search pattern
-// would accept, or -1.
+// literalNth finds the first occurrence of sub in ctx that the search pattern
+// would accept, after skipping `skip` acceptable occurrences -- the match may
+// be preceded, within its own block, by that many copies of its text. A
+// candidate inside inline markup is neither counted nor returned; it is what
+// the search is trying not to land on.
 //
 // The pattern is `(?:^|\b|_)` + sub + `(?:_|\b|$)`. When sub holds no quotes
 // it is a plain literal, so the same answer comes from a literal search plus a
@@ -38,7 +41,7 @@ func isPunctOnly(s string) bool {
 // Boundary here means what `\b` means to the engine: a transition between a
 // word character and something else. `_` is accepted explicitly on either side
 // because the pattern spells it out, and the ends of the string count.
-func literalFirst(ctx, sub string) int {
+func literalNth(ctx, sub string, skip int) int {
 	if sub == "" {
 		return -1
 	}
@@ -53,12 +56,44 @@ func literalFirst(ctx, sub string) int {
 		}
 		at := i + j
 
-		if boundaryBefore(ctx, at, first) && boundaryAfter(ctx, at+len(sub), last) {
-			return at
+		if boundaryBefore(ctx, at, first) && boundaryAfter(ctx, at+len(sub), last) &&
+			!insideInlineMarkup(ctx, []int{at, at + len(sub)}) {
+			if skip == 0 {
+				return at
+			}
+			skip--
 		}
 		// Advance by one byte rather than by len(sub): overlapping candidates
 		// are rare but real, and skipping them would miss a valid match.
 		_, w := utf8.DecodeRuneInString(ctx[at:])
+		i = at + w
+	}
+}
+
+// countPrior counts the occurrences of sub in text that the search would
+// accept, judged the same way literalNth judges its candidates -- an
+// occurrence the search would never land on must not widen the skip.
+func countPrior(text, sub string) int {
+	if sub == "" {
+		return 0
+	}
+
+	first, _ := utf8.DecodeRuneInString(sub)
+	last, _ := utf8.DecodeLastRuneInString(sub)
+
+	found := 0
+	for i := 0; ; {
+		j := strings.Index(text[i:], sub)
+		if j < 0 {
+			return found
+		}
+		at := i + j
+
+		if boundaryBefore(text, at, first) && boundaryAfter(text, at+len(sub), last) &&
+			!insideInlineMarkup(text, []int{at, at + len(sub)}) {
+			found++
+		}
+		_, w := utf8.DecodeRuneInString(text[at:])
 		i = at + w
 	}
 }
@@ -271,6 +306,11 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 
 	pat = regexp.MustCompile(`(?:^|\b|_)` + quoteTolerantPattern(sub) + `(?:_|\b|$)`)
 
+	// The match may be preceded, within its own block, by copies of its text;
+	// the search skips exactly that many acceptable candidates so a repeated
+	// word resolves to the occurrence that actually matched.
+	skip := a.skipOcc
+
 	// Only the first acceptable match is used, so the search stops at the
 	// first one and widens only if that turns out to be rejected below. This
 	// runs once per alert over the whole context, so scanning past a match
@@ -279,14 +319,13 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 	// A quote-free match is a plain literal, so the first candidate can be
 	// found without running the engine over the whole context.
 	if !strings.ContainsAny(sub, `'"`) {
-		if lit := literalFirst(ctx, sub); lit >= 0 &&
-			!insideInlineMarkup(ctx, []int{lit, lit + len(sub)}) {
+		if lit := literalNth(ctx, sub, skip); lit >= 0 {
 			return positionOf(ctx, lit, sub)
 		}
 	}
 
 	fsi := pat.FindAllStringIndex(ctx, 1)
-	if len(fsi) > 0 && !insideInlineMarkup(ctx, fsi[0]) {
+	if len(fsi) > 0 && skip == 0 && !insideInlineMarkup(ctx, fsi[0]) {
 		return positionOf(ctx, fsi[0][0], sub)
 	}
 	if len(fsi) > 0 {
@@ -312,6 +351,10 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 		// TODO: What about `scope: raw`?
 		for _, fs := range fsi {
 			if insideInlineMarkup(ctx, fs) {
+				continue
+			}
+			if skip > 0 {
+				skip--
 				continue
 			}
 			idx = fs[0]

@@ -26,21 +26,27 @@ var commentControlMatchesRE = regexp.MustCompile(`^vale (.+\..+)(\[.+\]) = (YES|
 
 // A File represents a linted text file.
 type File struct {
-	NLP        nlp.Info                   // -
-	Summary    bytes.Buffer               // holds content to be included in summarization checks
-	Alerts     []Alert                    // all alerts associated with this file
-	BaseStyles []string                   // base style assigned in .vale
-	Lines      []string                   // the File's Content split into lines
-	Sequences  []string                   // tracks various info (e.g., defined abbreviations)
-	Content    string                     // the raw file contents
-	Format     string                     // 'code', 'markup' or 'prose'
-	NormedExt  string                     // the normalized extension (see util/format.go)
-	Path       string                     // the full path
-	NormedPath string                     // the normalized path
-	Transform  string                     // XLST transform
-	RealExt    string                     // actual file extension
-	Checks     map[string]bool            // syntax-specific checks assigned in .vale
-	ChkToCtx   map[string]string          // maps a temporary context to a particular check
+	NLP        nlp.Info          // -
+	Summary    bytes.Buffer      // holds content to be included in summarization checks
+	Alerts     []Alert           // all alerts associated with this file
+	BaseStyles []string          // base style assigned in .vale
+	Lines      []string          // the File's Content split into lines
+	Sequences  []string          // tracks various info (e.g., defined abbreviations)
+	Content    string            // the raw file contents
+	Format     string            // 'code', 'markup' or 'prose'
+	NormedExt  string            // the normalized extension (see util/format.go)
+	Path       string            // the full path
+	NormedPath string            // the normalized path
+	Transform  string            // XLST transform
+	RealExt    string            // actual file extension
+	Checks     map[string]bool   // syntax-specific checks assigned in .vale
+	ChkToCtx   map[string]string // maps a temporary context to a particular check
+
+	// chkMasked counts, per check and match text, the occurrences already
+	// masked into ChkToCtx this block. An occurrence a prior alert consumed
+	// is gone from the context, so it must not widen a later alert's
+	// occurrence skip. Reset with ChkToCtx, in StartBlock.
+	chkMasked  map[string]int
 	Comments   map[string]bool            // comment control statements
 	Metrics    map[string]int             // count-based metrics
 	history    map[string]int             // -
@@ -195,6 +201,13 @@ func (f *File) TokensWith(model, text string) ([]tag.Token, error) {
 	}
 
 	return cache.TokensWith(model, text, &f.NLP)
+}
+
+// StartBlock resets the per-block alert state: the masked contexts, and the
+// counts of what was masked into them.
+func (f *File) StartBlock() {
+	f.ChkToCtx = make(map[string]string)
+	f.chkMasked = make(map[string]int)
 }
 
 // SortedAlerts returns all of f's alerts sorted by line and column.
@@ -389,12 +402,28 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 			blk.Context, f.lineStarts(blk.Context), a.Span[0], a.Span[1], pad)
 	default:
 		// For non-raw scopes the block text differs from the source, so the
-		// span isn't a usable byte offset; fall back to a text search. When a
-		// token occurs more than once, mask the words before it to disambiguate
-		// (bounded for performance on large contexts).
-		if len(a.Offset) == 0 && a.Span[0] >= 0 && a.Span[0] <= len(ctx) &&
-			strings.Count(ctx, a.Match) > 1 && len(ctx) < 1000 {
-			a.Offset = append(a.Offset, strings.Fields(ctx[0:a.Span[0]])...)
+		// span isn't a usable byte offset; fall back to a text search. When
+		// the match's text also occurs earlier in the block, the search must
+		// skip those occurrences -- counted here, where the span and the text
+		// share a coordinate system. (This replaces masking the words before
+		// the match, which read them from a document-sized context sliced at
+		// this block-sized span: junk for any block but the first, and
+		// capped, for cost, at contexts under 1,000 bytes.)
+		//
+		// A check that supplies its own Offset words -- `sequence` names the
+		// candidates it rejected -- keeps them; the two must not stack.
+		if len(a.Offset) == 0 && a.Match != "" &&
+			a.Span[0] >= 0 && a.Span[0] <= len(blk.Text) {
+			a.skipOcc = countPrior(blk.Text[:a.Span[0]], a.Match)
+
+			// An occurrence a prior alert already masked out of the context
+			// is not there to skip past.
+			if a.skipOcc > 0 {
+				a.skipOcc -= f.chkMasked[a.Check+"\x00"+a.Match]
+				if a.skipOcc < 0 {
+					a.skipOcc = 0
+				}
+			}
 		}
 
 		if !lookup {
@@ -413,6 +442,9 @@ func (f *File) AddAlert(a Alert, blk nlp.Block, lines, pad int, lookup bool) {
 		// dominated Vale's allocations.
 		if !a.HasByteOffsets {
 			f.ChkToCtx[a.Check], _ = Substitute(ctx, a.Match, '#')
+			if f.chkMasked != nil {
+				f.chkMasked[a.Check+"\x00"+a.Match]++
+			}
 		}
 		if !a.Hide {
 			// Ensure that we're not double-reporting an Alert:

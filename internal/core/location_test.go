@@ -72,6 +72,43 @@ func TestInitialPositionSkipsCodeSpan(t *testing.T) {
 	}
 }
 
+// A match preceded, within its block, by copies of its own text must be
+// located at its own occurrence, not the first. skipOcc carries the count,
+// measured by AddAlert where the span and the block text share a coordinate
+// system -- the word-masking this replaced sliced a document-sized context at
+// a block-sized span, and was capped at contexts under 1,000 bytes.
+func TestInitialPositionSkipsPriorOccurrences(t *testing.T) {
+	ctx := "One and two and three and four."
+
+	for skip, want := range map[int]int{0: 5, 1: 13, 2: 23} {
+		a := Alert{Match: "and", Span: []int{0, 0}, skipOcc: skip}
+		if pos, _ := initialPosition(ctx, "unfindable block text", a, -1); pos != want {
+			t.Errorf("skip %d: pos = %d, want %d", skip, pos, want)
+		}
+	}
+}
+
+func TestCountPrior(t *testing.T) {
+	cases := []struct {
+		text string
+		sub  string
+		want int
+	}{
+		{"say and stay", "and", 1},
+		{"band width", "and", 0},       // no boundary
+		{"`and` beside and", "and", 1}, // inline code doesn't count
+		{"and one and two and ", "and", 3},
+		{"nothing here", "and", 0},
+		{"", "and", 0},
+	}
+
+	for _, c := range cases {
+		if got := countPrior(c.text, c.sub); got != c.want {
+			t.Errorf("countPrior(%q, %q) = %d, want %d", c.text, c.sub, got, c.want)
+		}
+	}
+}
+
 func TestIsPunctOnly(t *testing.T) {
 	cases := map[string]bool{
 		",":      true,

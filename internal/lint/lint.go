@@ -365,7 +365,7 @@ var parallelFloor = 4096
 // span, and what `ChkToCtx` holds when a later one is formatted, do not depend
 // on the scheduler.
 func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup bool) error {
-	f.ChkToCtx = make(map[string]string)
+	f.StartBlock()
 
 	rules := l.inScopeFor(blk)
 
