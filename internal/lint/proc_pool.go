@@ -12,7 +12,7 @@ import (
 
 // A pool of long-lived helper processes.
 //
-// Vale hands AsciiDoc to Asciidoctor and MDX to mdx2vast. Converting a document
+// Vale hands AsciiDoc to Asciidoctor and rST to Docutils. Converting a document
 // costs a few milliseconds either way; starting the interpreter and loading the
 // library costs fifty to a hundred and sixty. Vale was paying the latter once
 // per file, so on a corpus of a few hundred pages nearly all of the time went

@@ -5,7 +5,7 @@ dir: fixtures/frontmatter
 cases:
   - name: markup
     args: .
-    requires: asciidoctor, mdx2vast, rst2html
+    requires: asciidoctor, rst2html
     exit: 0
     want: |
       test.adoc:3:23:vale.Annotations:'XXX' left in text

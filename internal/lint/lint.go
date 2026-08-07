@@ -36,10 +36,6 @@ type Linter struct {
 	adoc     *procPool
 	adocOnce sync.Once
 
-	// mdx is the same arrangement for mdx2vast.
-	mdx     *procPool
-	mdxOnce sync.Once
-
 	// rst is the same arrangement for Docutils.
 	rst     *procPool
 	rstOnce sync.Once
@@ -611,11 +607,6 @@ func (l *Linter) stopExternal() {
 		l.adoc.stop()
 		l.adoc = nil
 		l.adocOnce = sync.Once{}
-	}
-	if l.mdx != nil {
-		l.mdx.stop()
-		l.mdx = nil
-		l.mdxOnce = sync.Once{}
 	}
 	if l.rst != nil {
 		l.rst.stop()

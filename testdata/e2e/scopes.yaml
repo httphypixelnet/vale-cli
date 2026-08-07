@@ -145,7 +145,6 @@ cases:
   - name: skip-inline
     about: "#1052"
     args: .
-    requires: mdx2vast
     exit: 0
     want: ""
 

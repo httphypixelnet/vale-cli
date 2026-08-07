@@ -51,7 +51,7 @@ cases:
 
   - name: glob
     args: "--glob=*.{py,cc} ."
-    requires: asciidoctor, dita, mdx2vast, rst2html, xsltproc
+    requires: asciidoctor, dita, rst2html, xsltproc
     exit: 0
     want: |
       test.cc:1:4:vale.Annotations:'XXX' left in text
@@ -74,7 +74,7 @@ cases:
     exit: 0
     absent:
       - py
-    requires: asciidoctor, dita, mdx2vast, rst2html, xsltproc
+    requires: asciidoctor, dita, rst2html, xsltproc
 
   - name: glob-negated-dir
     dir: ../glob
@@ -92,12 +92,12 @@ cases:
     absent:
       - md
       - py
-    requires: asciidoctor, dita, mdx2vast, rst2html, xsltproc
+    requires: asciidoctor, dita, rst2html, xsltproc
 
   - name: no-config-found
     dir: ../../../..
     args: .
-    requires: asciidoctor, dita, mdx2vast, rst2html, xsltproc
+    requires: asciidoctor, dita, rst2html, xsltproc
     exit: 2
     contains: |
       E100 [.vale.ini not found] Runtime error

@@ -5,7 +5,6 @@ dir: fixtures/patterns
 cases:
   - name: mdx
     args: test.mdx
-    requires: mdx2vast
     exit: 0
     want: |
       test.mdx:1:19:vale.Redundancy:'ACT test' is redundant

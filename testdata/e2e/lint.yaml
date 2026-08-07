@@ -284,7 +284,6 @@ cases:
 
   - name: mdx
     args: test.mdx
-    requires: mdx2vast
     exit: 0
     want: |
       test.mdx:13:70:vale.Annotations:'TODO' left in text
@@ -381,7 +380,6 @@ cases:
     about: "[formats] maps the extension"
     dir: subdir3
     args: .
-    requires: mdx2vast
     exit: 0
     want: |
       test.mdx:3:1:vale.Annotations:'NOTE' left in text

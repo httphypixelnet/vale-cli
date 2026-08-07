@@ -5,7 +5,6 @@ dir: fixtures/comments
 cases:
   - name: mdx
     args: test.mdx
-    requires: mdx2vast
     exit: 1
     want: |
       test.mdx:15:19:vale.Redundancy:'ACT test' is redundant
@@ -16,7 +15,6 @@ cases:
 
   - name: mdx-config
     args: test2.mdx
-    requires: mdx2vast
     exit: 1
     want: |
       test2.mdx:15:19:vale.Redundancy:'ACT test' is redundant
