@@ -1,0 +1,97 @@
+---
+title: Deployment Guide
+author: Jane Doe
+myst:
+  substitutions:
+    product: Widget
+---
+
+(guide-overview-NOTE-label)=
+
+# Deployment guide
+
+Body prose with a TODO in it, and a {term}`role span with FIXME inside`.
+See {ref}`guide-config-label` and {doc}`../install` for background, or the
+{py:class}`widget.Client` API reference.
+
+% A comment holding a FIXME.
+
+The current release is {{ product }} and [attributed text]{.FIXME} keeps
+its text but not its attributes.
+
+## Configuration
+
+(guide-config-label)=
+
+```{note}
+:class: dropdown
+
+Admonition prose with an XXX in it.
+
+A second admonition paragraph, and a nested list:
+
+- One item with a TODO in it.
+- Another item.
+```
+
+```{warning}
+Fenced warning prose with an XXX in it.
+```
+
+```{figure} images/deploy.png
+---
+height: 150px
+name: fig-deploy-FIXME
+---
+The figure caption is prose, with a TODO in it.
+```
+
+```{code-block} python
+:caption: settings.py
+
+DEBUG = False  # FIXME in code
+```
+
+```{math}
+:label: eq-throughput
+
+T = \frac{FIXME}{NOTE}
+```
+
+## Rollout
+
++++ {"part": "FIXME"}
+
+::::{tab-set}
+
+:::{tab-item} Staging
+Staging rollout prose with an XXX in it.
+:::
+
+:::{tab-item} Production
+Production rollout prose, and a footnote[^rollout].
+:::
+
+::::
+
+[^rollout]: The footnote definition is prose with a TODO in it.
+
+:::{admonition} Rollback plan
+:class: tip
+
+| Step  | Owner |
+| ----- | ----- |
+| An XXX in a table cell. | Ops |
+
+> A blockquote with a TODO inside the admonition.
+:::
+
+```{toctree}
+:maxdepth: 2
+
+FIXME/install
+NOTE/configure
+```
+
+The plan is `preflight # FIXME` as inline code, and prose after it with a
+final XXX in it.

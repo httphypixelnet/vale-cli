@@ -204,6 +204,69 @@ cases:
     absent:
       - FIXME
 
+  - name: myst
+    about: "#667 -- MyST-only syntax is markup, not prose: targets, roles,
+      comments, options, and block breaks say nothing, directive content is
+      linted, and literal directives stay skipped"
+    args: test.myst
+    exit: 0
+    want: |
+      test.myst:13:19:vale.Annotations:'TODO' left in text
+      test.myst:29:26:vale.Annotations:'XXX' left in text
+      test.myst:33:19:vale.Annotations:'TODO' left in text
+      test.myst:38:30:vale.Annotations:'XXX' left in text
+      test.myst:46:37:vale.Annotations:'TODO' left in text
+      test.myst:68:31:vale.Annotations:'XXX' left in text
+      test.myst:77:53:vale.Annotations:'TODO' left in text
+      test.myst:84:6:vale.Annotations:'XXX' left in text
+      test.myst:86:23:vale.Annotations:'TODO' left in text
+      test.myst:97:7:vale.Annotations:'XXX' left in text
+    absent:
+      - FIXME
+      - NOTE
+
+  - name: myst-mapped
+    about: a Markdown file opts into MyST with `[formats] md = myst`, and a
+      directive's name scopes its content as a class
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [formats]
+        md = myst
+
+        [*.md]
+        BasedOnStyles = T
+      styles/T/InNote.yml: |
+        extends: existence
+        message: "'%s' in a note"
+        level: error
+        nonword: true
+        scope: class.note
+        raw:
+          - ZQX
+      test.md: |
+        A paragraph with ZQX is not matched.
+
+        (a-label-with-ZQX)=
+
+        ```{note}
+        First note paragraph with ZQX.
+
+        Second note paragraph with ZQX too.
+        ```
+
+        :::{note}
+        A colon-fence note with ZQX.
+        :::
+    args: test.md
+    exit: 1
+    want: |
+      test.md:6:27:T.InNote:'ZQX' in a note
+      test.md:8:28:T.InNote:'ZQX' in a note
+      test.md:12:25:T.InNote:'ZQX' in a note
+
   - name: assigned-ext
     about: --ext overrides the extension
     args: "--ext=.md test.xyz"

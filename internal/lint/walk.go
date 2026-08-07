@@ -70,6 +70,13 @@ type walker struct {
 	// than anything that accumulates across the document.
 	clsHistory []string
 
+	// enclosing holds every block container still open -- pushed on its start
+	// tag, popped on its end tag. Unlike clsHistory, it is not reset per
+	// block: a container's class stays in scope for every block inside it,
+	// however many blocks that is. A MyST directive holding three paragraphs
+	// scopes all three, not just the first.
+	enclosing []openTag
+
 	// spans maps this block's text back to the source, and srcCursor is how far
 	// the search for the next run has already gone. Separate from `cursor`,
 	// which places whole blocks and must not be moved by this.
@@ -150,17 +157,47 @@ func (w *walker) addTag(tag, class string) {
 	w.activeTag = tag
 }
 
+// An openTag is one still-open block container.
+type openTag struct {
+	tag string
+	cls string
+}
+
+// enclose records a block container as open.
+func (w *walker) enclose(tag, cls string) {
+	w.enclosing = append(w.enclosing, openTag{tag, cls})
+}
+
+// unclose closes the innermost open container with the given tag.
+func (w *walker) unclose(tag string) {
+	for i := len(w.enclosing) - 1; i >= 0; i-- {
+		if w.enclosing[i].tag == tag {
+			w.enclosing = append(w.enclosing[:i], w.enclosing[i+1:]...)
+			return
+		}
+	}
+}
+
 // classes returns the classes enclosing the current block, in the order they
 // were opened and without repeats.
 func (w *walker) classes() []string {
 	var found []string
-	for _, cls := range w.clsHistory {
+
+	add := func(cls string) {
 		for _, name := range strings.Fields(cls) {
 			if scopeSafe(name) && !core.StringInSlice(name, found) {
 				found = append(found, name)
 			}
 		}
 	}
+
+	for _, o := range w.enclosing {
+		add(o.cls)
+	}
+	for _, cls := range w.clsHistory {
+		add(cls)
+	}
+
 	return found
 }
 

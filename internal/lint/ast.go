@@ -23,6 +23,11 @@ var inlineTags = []string{
 	"b", "big", "i", "small", "abbr", "acronym", "cite", "dfn", "em", "kbd",
 	"strong", "a", "br", "img", "span", "sub", "sup", "code", "tt", "del"}
 
+// voidTags never carry content, so they are never "open" as containers.
+var voidTags = []string{
+	"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+	"meta", "source", "track", "wbr"}
+
 // inlineToScope names the inline elements that can be scoped on their own.
 //
 // These are siblings of `text`, not children of it: a scope of `text` is
@@ -91,6 +96,13 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 
 		class = getAttribute(tok, "class")
 		skipClass = checkClasses(class, skipClasses)
+
+		if tokt == html.StartTagToken && !core.StringInSlice(txt, inlineTags) &&
+			!core.StringInSlice(txt, voidTags) {
+			walker.enclose(txt, class)
+		} else if tokt == html.EndTagToken && !core.StringInSlice(txt, inlineTags) {
+			walker.unclose(txt)
+		}
 
 		blockSkip := skipClass && !core.StringInSlice(txt, inlineTags)
 		if tokt == html.ErrorToken { //nolint:gocritic

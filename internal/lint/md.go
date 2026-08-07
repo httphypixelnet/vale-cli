@@ -37,6 +37,12 @@ var reLinkDef = regexp.MustCompile(`\[(?:[^]\n]+)\]:`)
 var reNumericList = regexp.MustCompile(`(?m)^\d+\.`)
 
 func (l *Linter) lintMarkdown(f *core.File) error {
+	return l.lintMarkdownWith(f, goldMd)
+}
+
+// lintMarkdownWith lints f as Markdown read by the given converter -- the
+// plain configuration, or a dialect's such as MyST's.
+func (l *Linter) lintMarkdownWith(f *core.File, md goldmark.Markdown) error {
 	var buf bytes.Buffer
 
 	err := l.lintMetadata(f)
@@ -49,7 +55,7 @@ func (l *Linter) lintMarkdown(f *core.File) error {
 		return err
 	}
 
-	if err = goldMd.Convert([]byte(s), &buf); err != nil {
+	if err = md.Convert([]byte(s), &buf); err != nil {
 		return core.NewE100(f.Path, err)
 	}
 
