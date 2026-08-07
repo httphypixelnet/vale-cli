@@ -333,7 +333,8 @@ cases:
 
   - name: qdoc-fragments
     about: doc comments in C++ sources lint as QDoc through `[formats]`, with
-      alerts mapped back to the source
+      alerts mapped back to the source; block comments are documentation,
+      line comments are code
     files:
       .vale.ini: |
         StylesPath = styles
@@ -362,11 +363,19 @@ cases:
             \note The note has a ZQX too, and \c {a ZQX in code} does not count.
         */
         void Widget::clicked() {}
+
+        // A ZQX in a line comment is code, not documentation.
+
+        /*
+            A plain block comment still has its ZQX linted.
+        */
+        void Widget::other() {}
     args: widget.cpp
     exit: 1
     want: |
       widget.cpp:6:23:T.Tok:'ZQX' in a doc comment
       widget.cpp:8:26:T.Tok:'ZQX' in a doc comment
+      widget.cpp:15:41:T.Tok:'ZQX' in a doc comment
 
   - name: quarto
     about: "#793 -- fenced divs, attributes, and shortcodes are markup, div

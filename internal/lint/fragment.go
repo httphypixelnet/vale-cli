@@ -95,6 +95,12 @@ func (l *Linter) lintFragments(f *core.File) error {
 
 	last := 0
 	for _, comment := range comments {
+		// QDoc is written in block comments; a `//` comment is code, not
+		// documentation.
+		if f.NormedExt == ".qdoc" && !strings.HasPrefix(comment.Source, "/*") {
+			continue
+		}
+
 		f.SetMetaScope(comment.Scope)
 		f.SetText(comment.Text)
 
