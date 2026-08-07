@@ -51,12 +51,32 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 		m = qc.FilterPredicates(m, source)
 		for _, c := range m.Captures {
 			rText := c.Node.Content(source)
+			row := int(c.Node.StartPoint().Row)
+			offset := int(c.Node.StartPoint().Column)
+
+			// The Lua grammar's comment tokens swallow the whitespace --
+			// newlines included -- that precedes them; shift the node past
+			// it so Line and Offset point at the delimiter.
+			trimmed := strings.TrimLeft(rText, " \t\n")
+			if cut := len(rText) - len(trimmed); cut > 0 {
+				pre := rText[:cut]
+				if n := strings.Count(pre, "\n"); n > 0 {
+					row += n
+					offset = cut - (strings.LastIndexByte(pre, '\n') + 1)
+				} else {
+					offset += cut
+				}
+				rText = trimmed
+			}
+
 			cText := qe.lang.Delims.ReplaceAllString(rText, "")
 
 			var strip []int
 
 			scope := "text.comment" + meta + ".line"
-			if strings.Count(cText, "\n") > 1 {
+			// A trailing newline is part of some grammars' tokens; only a
+			// newline between content makes a comment a block.
+			if strings.Count(strings.TrimRight(cText, "\n"), "\n") > 0 {
 				scope = "text.comment" + meta + ".block"
 
 				// Blank the per-line decoration before measuring indentation,
@@ -100,8 +120,8 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 			}
 
 			comments = append(comments, Comment{
-				Line:   int(c.Node.StartPoint().Row) + 1,
-				Offset: int(c.Node.StartPoint().Column),
+				Line:   row + 1,
+				Offset: offset,
 				Scope:  scope,
 				Text:   cText,
 				Source: rText,

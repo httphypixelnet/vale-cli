@@ -568,6 +568,14 @@ cases:
       test.r:1:3:vale.Annotations:'NOTE' left in text
       test.r:6:22:vale.Annotations:'XXX' left in text
 
+  - name: perl
+    args: test.pl
+    exit: 0
+    want: |
+      test.pl:2:3:vale.Annotations:'NOTE' left in text
+      test.pl:5:21:vale.Annotations:'XXX' left in text
+      test.pl:8:7:vale.Annotations:'TODO' left in text
+
   - name: php
     args: test.php
     exit: 0

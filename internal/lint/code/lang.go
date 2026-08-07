@@ -51,10 +51,16 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 		return C(), nil
 	case ".js", ".jsx":
 		return JavaScript(), nil
+	case ".hs":
+		return Haskell(), nil
 	case ".jl":
 		return Julia(), nil
 	case ".java":
 		return Java(), nil
+	case ".lua":
+		return Lua(), nil
+	case ".php":
+		return PHP(), nil
 	case ".ts":
 		return TypeScript(), nil
 	case ".tsx":
@@ -63,6 +69,8 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 		return Protobuf(), nil
 	case ".qml":
 		return QML(), nil
+	case ".r":
+		return R(), nil
 	case ".yml":
 		return YAML(), nil
 	case ".css":

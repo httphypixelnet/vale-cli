@@ -64,6 +64,12 @@ func commentPadding(comment code.Comment, line int, source string, lang *code.La
 		// `/**` -- was removed before that by Delims, and it is still on the
 		// line the alert is measured against, so it is added here. On any line
 		// but the first there is no delimiter and this contributes nothing.
+		if p := lang.Padding(source); line == 1 && p > 0 {
+			// The delimiter line: Padding counts the marker and the spaces
+			// after it, and those spaces are also what the dedent took off,
+			// so adding the strip would count them twice.
+			return p
+		}
 		return lang.Padding(source) + max(n-comment.Offset, 0)
 	}
 

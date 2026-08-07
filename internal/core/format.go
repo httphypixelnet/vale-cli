@@ -7,29 +7,17 @@ import (
 )
 
 // CommentsByNormedExt determines what parts of a file we should lint -- e.g.,
-// we only want to lint // or /* comments in a C++ file. Multiple formats are
-// mapped to a single extension (e.g., .java -> .c) because many languages use
-// the same comment delimiters.
+// we only want to lint ; comments in a Clojure file.
 //
 // Deprecated: When possible, we now use tree-sitter grammars to determine the
 // comment delimiters for a given file. See the `lint/code` package for more
 // information.
 //
-// TODO: This should be removed once we have tree-sitter grammars for all
-// languages.
+// Only Clojure (no bundled grammar uses `;` comments) and PowerShell (a
+// stand-in grammar would lose `<# #>` block interiors) remain here.
 var CommentsByNormedExt = map[string]map[string]string{
-	".c": {
-		"inline":     `(?:^|\s)(?:(//.+)|(/\*.+\*/))`,
-		"blockStart": `(/\*.*)`,
-		"blockEnd":   `(.*\*/)`,
-	},
 	".clj": {
 		"inline":     `(;+.+)`,
-		"blockStart": `$^`,
-		"blockEnd":   `$^`,
-	},
-	".r": {
-		"inline":     `(#.+)`,
 		"blockStart": `$^`,
 		"blockEnd":   `$^`,
 	},
@@ -37,21 +25,6 @@ var CommentsByNormedExt = map[string]map[string]string{
 		"inline":     `(#.+)`,
 		"blockStart": `(<#.*)`,
 		"blockEnd":   `(.*#>)`,
-	},
-	".php": {
-		"inline":     `(//.+)|(/\*.+\*/)|(#.+)`,
-		"blockStart": `(/\*.*)`,
-		"blockEnd":   `(.*\*/)`,
-	},
-	".lua": {
-		"inline":     `(-- .+)`,
-		"blockStart": `(-{2,3}\[\[.*)`,
-		"blockEnd":   `(.*\]\])`,
-	},
-	".hs": {
-		"inline":     `(-- .+)`,
-		"blockStart": `(\{-.*)`,
-		"blockEnd":   `(.*-\})`,
 	},
 }
 
