@@ -46,7 +46,11 @@ type File struct {
 	// masked into ChkToCtx this block. An occurrence a prior alert consumed
 	// is gone from the context, so it must not widen a later alert's
 	// occurrence skip. Reset with ChkToCtx, in StartBlock.
-	chkMasked  map[string]int
+	chkMasked map[string]int
+
+	// sanShifts records, per line, where the sanitizer's `&rsquo;` rewrite
+	// shortened the text, so spans can be mapped back to the file's bytes.
+	sanShifts  map[int][]int
 	Comments   map[string]bool            // comment control statements
 	Metrics    map[string]int             // count-based metrics
 	history    map[string]int             // -
@@ -173,6 +177,7 @@ func NewFile(src string, config *Config) (*File, error) {
 		limits: make(map[string]int), Path: path, Metrics: make(map[string]int),
 		NLP:    nlp.Info{Endpoint: config.NLPEndpoint, Lang: lang},
 		Lookup: lookup, NormedPath: normed,
+		sanShifts: findShifts(string(fbytes)),
 	}
 
 	return &file, nil
@@ -208,6 +213,37 @@ func (f *File) TokensWith(model, text string) ([]tag.Token, error) {
 func (f *File) StartBlock() {
 	f.ChkToCtx = make(map[string]string)
 	f.chkMasked = make(map[string]int)
+}
+
+// MapAlertsToSource shifts and widens alert spans to account for the
+// sanitizer's `&rsquo;` rewrite, so every span indexes the file's actual
+// text rather than the sanitized copy that was linted. See #687.
+func (f *File) MapAlertsToSource() {
+	if len(f.sanShifts) == 0 {
+		return
+	}
+
+	for i := range f.Alerts {
+		a := &f.Alerts[i]
+		if len(a.Span) < 2 || a.Span[0] <= 0 {
+			continue
+		}
+
+		d0, d1 := 0, 0
+		for _, col := range f.sanShifts[a.Line] {
+			if col < a.Span[0] {
+				// A rewrite before the match moves the whole span right.
+				d0 += rsquoShift
+				d1 += rsquoShift
+			} else if col <= a.Span[1] {
+				// A rewrite inside the match widens it.
+				d1 += rsquoShift
+			}
+		}
+
+		a.Span[0] += d0
+		a.Span[1] += d1
+	}
 }
 
 // SortedAlerts returns all of f's alerts sorted by line and column.

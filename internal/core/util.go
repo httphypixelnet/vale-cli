@@ -20,6 +20,38 @@ var sanitizer = strings.NewReplacer(
 	"\r\n", "\n",
 	"\r", "\n")
 
+// rsquoShift is how many bytes the sanitizer removes per `&rsquo;` rewrite.
+const rsquoShift = len("&rsquo;") - len("'")
+
+// findShifts records, per 1-based line, the rune column (in Sanitize's
+// output) of each rewrite that shortened the text, so a reported span can be
+// mapped back to the file's actual bytes. Only `&rsquo;` changes a line's
+// width -- the line-ending rewrites don't move columns.
+func findShifts(raw string) map[int][]int {
+	if !strings.Contains(raw, "&rsquo;") {
+		return nil
+	}
+
+	shifts := make(map[int][]int)
+	for i, line := range strings.Split(raw, "\n") {
+		at := 0
+		for {
+			j := strings.Index(line[at:], "&rsquo;")
+			if j < 0 {
+				break
+			}
+			at += j
+
+			col := nlp.StrLen(Sanitize(line[:at])) + 1
+			shifts[i+1] = append(shifts[i+1], col)
+
+			at += len("&rsquo;")
+		}
+	}
+
+	return shifts
+}
+
 // CapFirst capitalizes the first letter of a string.
 func CapFirst(s string) string {
 	if len(s) == 0 {

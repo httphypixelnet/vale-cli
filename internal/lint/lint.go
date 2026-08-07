@@ -288,6 +288,12 @@ func (l *Linter) lintFile(src string) lintResult {
 		err = l.lintBlock(file, raw, len(file.Lines), 0, true)
 	}
 
+	// A transformed file's alerts live in the stylesheet's output, which the
+	// sanitizer's shifts say nothing about.
+	if err == nil && file.Transform == "" {
+		file.MapAlertsToSource()
+	}
+
 	return lintResult{file, err}
 }
 

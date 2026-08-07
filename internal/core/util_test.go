@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/errata-ai/vale/v3/internal/system"
@@ -46,6 +47,40 @@ func TestPrepText(t *testing.T) {
 	for raw, prepped := range rawToPrepped {
 		if prepped != Sanitize(raw) {
 			t.Errorf("expected = %v, got = %v", prepped, Sanitize(raw))
+		}
+	}
+}
+
+func TestFindShifts(t *testing.T) {
+	if got := findShifts("no entities here\n"); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+
+	got := findShifts("a&rsquo;b\nplain\nx &rsquo; y&rsquo;\n")
+	want := map[int][]int{1: {2}, 3: {3, 6}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("expected %v, got %v", want, got)
+	}
+}
+
+func TestMapAlertsToSource(t *testing.T) {
+	f := File{
+		sanShifts: map[int][]int{1: {15}, 2: {6}},
+		Alerts: []Alert{
+			// The rewrite sits inside the match: the span widens.
+			{Line: 1, Span: []int{13, 16}},
+			// The rewrite precedes the match: the span shifts.
+			{Line: 2, Span: []int{11, 14}},
+			// A line with no rewrites is untouched.
+			{Line: 3, Span: []int{2, 5}},
+		},
+	}
+	f.MapAlertsToSource()
+
+	want := [][]int{{13, 22}, {17, 20}, {2, 5}}
+	for i, a := range f.Alerts {
+		if !reflect.DeepEqual(a.Span, want[i]) {
+			t.Errorf("alert %d: expected %v, got %v", i, want[i], a.Span)
 		}
 	}
 }

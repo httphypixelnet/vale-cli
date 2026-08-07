@@ -144,6 +144,75 @@ cases:
       quote.md:1:19:Vale.Terms:Use 'CASTLE' instead of 'castle'.
       quote.md:2:8:Vale.Terms:Use 'CASTLE' instead of 'castle'.
 
+  - name: issue-687
+    about: "#687 -- spans cover the file's actual bytes: `&rsquo;` is
+      normalized for matching, but the reported span accounts for its width,
+      whether the entity sits inside the match or before it"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.html]
+        T.Contraction = YES
+        T.Real = YES
+      styles/T/Contraction.yml: |
+        extends: existence
+        message: "Avoid '%s'."
+        level: error
+        raw:
+          - "it['’]s"
+      styles/T/Real.yml: |
+        extends: existence
+        message: "Avoid '%s'."
+        level: error
+        tokens:
+          - real
+      test.html: |
+        <p>You know it&rsquo;s great software</p>
+        <p>It&rsquo;s a real word test</p>
+    args: --output=JSON test.html
+    exit: 1
+    want: |
+      {
+        "test.html": [
+          {
+            "Action": {
+              "Name": "",
+              "Params": null
+            },
+            "Span": [
+              13,
+              22
+            ],
+            "Check": "T.Contraction",
+            "Description": "",
+            "Link": "",
+            "Message": "Avoid 'it's'.",
+            "Severity": "error",
+            "Match": "it's",
+            "Line": 1
+          },
+          {
+            "Action": {
+              "Name": "",
+              "Params": null
+            },
+            "Span": [
+              17,
+              20
+            ],
+            "Check": "T.Real",
+            "Description": "",
+            "Link": "",
+            "Message": "Avoid 'real'.",
+            "Severity": "error",
+            "Match": "real",
+            "Line": 2
+          }
+        ]
+      }
+
   - name: nested-markup
     dir: misc/markup
     args: .
