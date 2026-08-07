@@ -403,9 +403,18 @@ func (w *walker) advance(text string) int {
 	pos := strings.Index(ctx, last)
 	if pos < 0 {
 		// Extraction rewrites text, so a line is not always a substring of the
-		// source; a single word from it usually still is.
-		if fields := strings.Fields(last); len(fields) > 0 {
-			pos = strings.Index(ctx, fields[len(fields)-1])
+		// source; a single word from it usually still is. The longest word,
+		// though: the final one is as often a short `it.` that appears all
+		// over the document, landing the block on someone else's line -- and
+		// an alert placed by that line is an alert placed on the wrong text.
+		longest := ""
+		for _, f := range strings.Fields(last) {
+			if len(f) > len(longest) {
+				longest = f
+			}
+		}
+		if longest != "" {
+			pos = strings.Index(ctx, longest)
 		}
 	}
 
