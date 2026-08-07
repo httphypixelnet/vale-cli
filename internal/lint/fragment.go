@@ -107,6 +107,8 @@ func (l *Linter) lintFragments(f *core.File) error {
 			err = l.lintADoc(f)
 		case ".org":
 			err = l.lintOrg(f)
+		case ".qdoc":
+			err = l.lintQDoc(f)
 		default:
 			return fmt.Errorf("unsupported markup format '%s'", f.NormedExt)
 		}

@@ -244,6 +244,8 @@ func (l *Linter) lintFile(src string) lintResult {
 			err = l.lintMDX(file)
 		case ".myst":
 			err = l.lintMyST(file)
+		case ".qdoc":
+			err = l.lintQDoc(file)
 		case ".qmd":
 			err = l.lintQuarto(file)
 		case ".rst":

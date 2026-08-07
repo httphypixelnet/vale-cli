@@ -225,6 +225,66 @@ cases:
       - FIXME
       - NOTE
 
+  - name: qdoc
+    about: "#784 -- QDoc's commands are markup: topic lines, code blocks,
+      links' targets, and options say nothing, while titles, sections,
+      briefs, notes, items, cells, and captions are prose"
+    args: test.qdoc
+    exit: 0
+    want: |
+      test.qdoc:3:32:vale.Annotations:'TODO' left in text
+      test.qdoc:5:29:vale.Annotations:'XXX' left in text
+      test.qdoc:7:23:vale.Annotations:'TODO' left in text
+      test.qdoc:8:8:vale.Annotations:'XXX' left in text
+      test.qdoc:10:40:vale.Annotations:'TODO' left in text
+      test.qdoc:14:32:vale.Annotations:'XXX' left in text
+      test.qdoc:17:32:vale.Annotations:'TODO' left in text
+      test.qdoc:25:26:vale.Annotations:'XXX' left in text
+      test.qdoc:30:39:vale.Annotations:'XXX' left in text
+      test.qdoc:33:36:vale.Annotations:'TODO' left in text
+      test.qdoc:36:46:vale.Annotations:'XXX' left in text
+      test.qdoc:38:47:vale.Annotations:'TODO' left in text
+    absent:
+      - FIXME
+      - NOTE
+
+  - name: qdoc-fragments
+    about: doc comments in C++ sources lint as QDoc through `[formats]`, with
+      alerts mapped back to the source
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [formats]
+        cpp = qdoc
+
+        [*.cpp]
+        T.Tok = YES
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s' in a doc comment"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      widget.cpp: |
+        #include "widget.h"
+
+        /*!
+            \fn void Widget::clicked()
+
+            This signal has a ZQX in its prose.
+
+            \note The note has a ZQX too, and \c {a ZQX in code} does not count.
+        */
+        void Widget::clicked() {}
+    args: widget.cpp
+    exit: 1
+    want: |
+      widget.cpp:6:23:T.Tok:'ZQX' in a doc comment
+      widget.cpp:8:26:T.Tok:'ZQX' in a doc comment
+
   - name: quarto
     about: "#793 -- fenced divs, attributes, and shortcodes are markup, div
       content is linted, and code cells stay skipped, options and all"

@@ -1,0 +1,45 @@
+/*!
+    \page overview.html
+    \title A page title with a TODO in it
+
+    \brief The brief has an XXX in it.
+
+    Body prose with a TODO in it, and a \l {FIXME-target} {link text with
+    an XXX in it} for more.
+
+    \section1 A section heading with a TODO in it
+
+    Use the \c FIXME class with the \a FIXME argument.
+
+    See \b {bold prose with an XXX in it} and \e {some emphasized prose} here.
+
+    \list
+        \li A list item with a TODO in it.
+        \li A second item.
+    \endlist
+
+    \code
+        int x = 0;  // a FIXME in code
+    \endcode
+
+    \note A note with an XXX in it.
+
+    \table
+        \header
+            \li Name
+            \li A header cell with an XXX in it
+        \row
+            \li \c FIXME
+            \li A body cell with a TODO in it.
+    \endtable
+
+    \value FIRST An enum description with an XXX in it.
+
+    \image diagram-FIXME.png A caption with a TODO in it.
+
+    \omit
+        Omitted prose, FIXME and all.
+    \endomit
+
+    \sa FIXME, QObject
+*/
