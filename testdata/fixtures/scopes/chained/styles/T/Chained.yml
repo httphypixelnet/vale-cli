@@ -1,0 +1,8 @@
+extends: existence
+message: paragraph & ~heading
+level: error
+nonword: true
+scope:
+  - paragraph & ~heading
+raw:
+  - QCHP

@@ -309,11 +309,32 @@ func (mgr *Manager) compileCheck(file []byte, chkName, path string) (Rule, bool,
 	return rule, ok && pos != "", nil
 }
 
+// scopeBases names the block families a declared scope needs built.
+//
+// A scope may chain terms with `&`, and each term asks for its own family:
+// `paragraph & ~heading` needs paragraph splitting as much as `paragraph`
+// does. Reading the whole chain as one name left HasScope false, splitting
+// off, and the rule silently matching nothing. See #1133.
+//
+// A negated term asks for a family's absence, which needs nothing built.
+func scopeBases(s string) []string {
+	bases := []string{}
+	for _, part := range strings.Split(s, "&") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "~") {
+			continue
+		}
+		bases = append(bases, strings.Split(part, ".")[0])
+	}
+	return bases
+}
+
 // registerCheck records a compiled rule and what it implies for the run.
 func (mgr *Manager) registerCheck(chkName string, rule Rule, taggedPOS bool) error {
 	for _, s := range rule.Fields().Scope {
-		base := strings.Split(s, ".")[0]
-		mgr.scopes[base] = struct{}{}
+		for _, base := range scopeBases(s) {
+			mgr.scopes[base] = struct{}{}
+		}
 	}
 
 	if rule.Fields().Extends == "sequence" || taggedPOS {

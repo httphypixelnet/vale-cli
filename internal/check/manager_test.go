@@ -35,6 +35,40 @@ func TestAddCheck(t *testing.T) {
 	}
 }*/
 
+// scopeBases feeds HasScope, which switches on paragraph splitting, sentence
+// segmentation, and inline capture. A term that goes unrecorded leaves its
+// rule silently matching nothing -- the failure #1133 reported.
+func TestScopeBases(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"paragraph", []string{"paragraph"}},
+		{"paragraph.md", []string{"paragraph"}},
+		{"paragraph & ~heading", []string{"paragraph"}},
+		{"sentence & ~blockquote & ~list", []string{"sentence"}},
+		{"paragraph & sentence", []string{"paragraph", "sentence"}},
+		{"sentence.heading & ~h2", []string{"sentence"}},
+
+		// A negated term asks for a family's absence: nothing to build.
+		{"~heading", []string{}},
+		{"~blockquote & ~heading", []string{}},
+	}
+
+	for _, c := range cases {
+		got := scopeBases(c.in)
+		if len(got) != len(c.want) {
+			t.Fatalf("scopeBases(%q) = %v, want %v", c.in, got, c.want)
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("scopeBases(%q)[%d] = %q, want %q",
+					c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
 var msgtests = []struct {
 	in   string
 	args []string

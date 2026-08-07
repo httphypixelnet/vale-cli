@@ -25,6 +25,16 @@ cases:
     want: |
       test.md:6:16:T.Para:'ZQX' in a paragraph
 
+  - name: chained
+    about: "#1133 -- every term of an `&` chain switches on what it needs, so
+      a chained scope fires without an unrelated rule declaring the term alone"
+    args: .
+    exit: 1
+    want: |
+      test.md:1:16:T.Chained:paragraph & ~heading
+      test.md:1:25:T.ChainedSentence:sentence & ~blockquote
+      test.md:3:31:T.ChainedSentence:sentence & ~blockquote
+
   - name: matrix
     about: one rule per scope over one document holding every element, so the
       full output says exactly which text each scope does and doesn't reach
