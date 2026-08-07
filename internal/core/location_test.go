@@ -28,6 +28,50 @@ func TestInitialPositionPunctAnchor(t *testing.T) {
 	}
 }
 
+// A match butted directly against a code span's delimiter is inside (or
+// beside) that span, and locating an alert there mislocates it -- the prose
+// occurrence the rule actually matched sits later in the line. fs[1] is
+// exclusive, so the character to inspect is ctx[fs[1]] itself. See #1132's
+// follow-up: `Inline `+"`sum(x) # ZQX`"+` and text ZQX after.`
+func TestInsideInlineMarkup(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  string
+		fs   []int
+		want bool
+	}{
+		{"plain prose", "some ZQX here", []int{5, 8}, false},
+		{"opening backtick beside match", "x `ZQX` y", []int{3, 6}, true},
+		{"closing backtick against match", "x `f() # ZQX` and ZQX y",
+			[]int{9, 12}, true},
+		{"prose occurrence after a span", "x `f() # ZQX` and ZQX y",
+			[]int{18, 21}, false},
+		{"hyphenated compound is not markup", "a well-known fix",
+			[]int{2, 6}, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := insideInlineMarkup(c.ctx, c.fs); got != c.want {
+				t.Errorf("insideInlineMarkup(%q, %v) = %v, want %v",
+					c.ctx, c.fs, got, c.want)
+			}
+		})
+	}
+}
+
+// A match shadowed by an identical string inside a code span must be located
+// at its prose occurrence, not the span's.
+func TestInitialPositionSkipsCodeSpan(t *testing.T) {
+	ctx := "Inline `sum(x) # ZQX` and text ZQX after."
+	txt := "Inline ************ and text ZQX after."
+
+	pos, _ := initialPosition(ctx, txt, Alert{Match: "ZQX"}, -1)
+	if pos != 32 {
+		t.Errorf("pos = %d, want 32 (the prose occurrence)", pos)
+	}
+}
+
 func TestIsPunctOnly(t *testing.T) {
 	cases := map[string]bool{
 		",":      true,

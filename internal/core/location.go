@@ -118,6 +118,15 @@ func insideInlineMarkup(ctx string, fs []int) bool {
 		return true
 	}
 
+	// fs[1] is exclusive, so the character right beside the match is
+	// ctx[fs[1]] -- the check above looks one further out and misses a
+	// closing backtick sitting directly against the match, as in
+	// `f(x) # word`. Only backticks: a hyphen there is usually a compound
+	// word, and rejecting `well` in `well-known` would mislocate it.
+	if fs[1] < len(ctx) && ctx[fs[1]] == '`' {
+		return true
+	}
+
 	return false
 }
 
@@ -301,13 +310,8 @@ func initialPosition(ctx, txt string, a Alert, at int) (int, string) {
 		// by ignoring these inline code spans.
 		//
 		// TODO: What about `scope: raw`?
-		size := nlp.StrLen(ctx)
 		for _, fs := range fsi {
-			start := fs[0] - 1
-			end := fs[1] + 1
-			if start > 0 && (ctx[start] == '`' || ctx[start] == '-') {
-				continue
-			} else if end < size && (ctx[end] == '`' || ctx[end] == '-') {
+			if insideInlineMarkup(ctx, fs) {
 				continue
 			}
 			idx = fs[0]
