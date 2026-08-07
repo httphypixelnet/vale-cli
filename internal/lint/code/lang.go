@@ -61,6 +61,8 @@ func GetLanguageFromExt(ext string) (*Language, error) {
 		return Tsx(), nil
 	case ".proto":
 		return Protobuf(), nil
+	case ".qml":
+		return QML(), nil
 	case ".yml":
 		return YAML(), nil
 	case ".css":

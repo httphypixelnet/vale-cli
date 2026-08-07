@@ -377,6 +377,45 @@ cases:
       widget.cpp:8:26:T.Tok:'ZQX' in a doc comment
       widget.cpp:15:41:T.Tok:'ZQX' in a doc comment
 
+  - name: qml-fragments
+    about: doc comments in QML sources lint as QDoc through `[formats]`;
+      the QML code itself is never prose
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [formats]
+        qml = qdoc
+
+        [*.qml]
+        T.Tok = YES
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s' in a doc comment"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      Button.qml: |
+        import QtQuick
+
+        /*!
+            \qmltype Button
+            \brief A ZQX in the brief.
+
+            \section1 A ZQX heading
+        */
+        Button {
+            // A ZQX in a line comment stays code.
+            width: ZQX
+        }
+    args: Button.qml
+    exit: 1
+    want: |
+      Button.qml:5:14:T.Tok:'ZQX' in a doc comment
+      Button.qml:7:17:T.Tok:'ZQX' in a doc comment
+
   - name: quarto
     about: "#793 -- fenced divs, attributes, and shortcodes are markup, div
       content is linted, and code cells stay skipped, options and all"

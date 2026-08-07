@@ -16,6 +16,7 @@ func TestFormatFromExt(t *testing.T) {
 		".Rmd":   {".md", "markup"},
 		".rmd":   {".md", "markup"},
 		".R":     {".r", "code"},
+		".qml":   {".qml", "code"},
 	}
 	m := map[string]string{}
 	for ext, format := range extToFormat {
@@ -25,6 +26,14 @@ func TestFormatFromExt(t *testing.T) {
 		}
 		if format[1] != f {
 			t.Errorf("expected = %v, got = %v", format[1], f)
+		}
+	}
+
+	mapped := map[string]string{"cpp": "qdoc", "qml": "qdoc"}
+	for _, ext := range []string{".cpp", ".qml"} {
+		normExt, f := FormatFromExt(ext, mapped)
+		if normExt != ".qdoc" || f != "fragment" {
+			t.Errorf("expected = [.qdoc fragment], got = [%v %v]", normExt, f)
 		}
 	}
 }
