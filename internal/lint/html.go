@@ -36,6 +36,7 @@ var blockDelimiters = map[string]string{
 	".qdoc": "\n\\code\n$1\n\\endcode\n",
 	".qmd":  "\n```\n$1\n```\n",
 	".rst":  "\n::\n\n%s\n",
+	".typ":  "\n```\n$1\n```\n",
 	".org":  orgExample,
 }
 
@@ -91,6 +92,7 @@ var inlineDelimiters = map[string]string{
 	".qdoc": `\c {$1}`,
 	".qmd":  "`$1`",
 	".rst":  "``$1``",
+	".typ":  "`$1`",
 	".org":  "=$1=",
 }
 

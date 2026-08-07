@@ -225,6 +225,89 @@ cases:
       - FIXME
       - NOTE
 
+  - name: typst
+    about: "#651 -- Typst parses through typst2vast, the compiler's own
+      parser without its evaluator: markup is prose, code mode is masked,
+      and a content block anywhere inside code is prose again"
+    args: test.typ
+    requires: typst2vast
+    exit: 0
+    want: |
+      test.typ:12:27:vale.Annotations:'TODO' left in text
+      test.typ:17:19:vale.Annotations:'TODO' left in text
+      test.typ:17:59:vale.Annotations:'XXX' left in text
+      test.typ:18:22:vale.Annotations:'TODO' left in text
+      test.typ:36:37:vale.Annotations:'TODO' left in text
+      test.typ:40:18:vale.Annotations:'XXX' left in text
+      test.typ:42:22:vale.Annotations:'TODO' left in text
+      test.typ:45:27:vale.Annotations:'XXX' left in text
+      test.typ:48:40:vale.Annotations:'TODO' left in text
+      test.typ:55:29:vale.Annotations:'XXX' left in text
+      test.typ:58:65:vale.Annotations:'XXX' left in text
+    absent:
+      - FIXME
+      - NOTE
+
+  - name: typst-scopes
+    about: Typst's headings, styled spans, raw text, and list items land in
+      their Vale scopes
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.typ]
+        T.Head = YES
+        T.Strong = YES
+        T.Code = YES
+        T.List = YES
+      styles/T/Head.yml: |
+        extends: existence
+        message: heading
+        level: error
+        nonword: true
+        scope: heading
+        raw:
+          - ZQX
+      styles/T/Strong.yml: |
+        extends: existence
+        message: strong
+        level: error
+        nonword: true
+        scope: strong
+        raw:
+          - ZQX
+      styles/T/Code.yml: |
+        extends: existence
+        message: code
+        level: error
+        nonword: true
+        scope: code
+        raw:
+          - ZQX
+      styles/T/List.yml: |
+        extends: existence
+        message: list
+        level: error
+        nonword: true
+        scope: list
+        raw:
+          - ZQX
+      test.typ: |
+        = A heading with ZQX inside
+
+        Plain prose with *a strong ZQX span* and `a raw ZQX span` inline.
+
+        - A list item with ZQX inside.
+    args: test.typ
+    requires: typst2vast
+    exit: 1
+    want: |
+      test.typ:1:18:T.Head:heading
+      test.typ:3:28:T.Strong:strong
+      test.typ:3:49:T.Code:code
+      test.typ:5:20:T.List:list
+
   - name: qdoc
     about: "#784 -- QDoc's commands are markup: topic lines, code blocks,
       links' targets, and options say nothing, while titles, sections,

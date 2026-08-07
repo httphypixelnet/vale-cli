@@ -90,6 +90,7 @@ var FormatByExtension = map[string][]string{
 	`\.(?:scala|sbt)$`: {".c", "code"},
 	`\.(?:swift)$`:     {".c", "code"},
 	`\.(?:ts|tsx)$`:    {".ts", "code"},
+	`\.(?:typ)$`:       {".typ", "markup"},
 	`\.(?:txt)$`:       {".txt", "text"},
 	`\.(?:xml|xsd)$`:   {".xml", "markup"},
 	`\.(?:yaml|yml)$`:  {".yml", "data"},

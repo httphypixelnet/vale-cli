@@ -36,6 +36,10 @@ type Linter struct {
 	adoc     *procPool
 	adocOnce sync.Once
 
+	// typst is the same arrangement for typst2vast.
+	typst         *procPool
+	typstPoolOnce sync.Once
+
 	// rst is the same arrangement for Docutils.
 	rst     *procPool
 	rstOnce sync.Once
@@ -250,6 +254,8 @@ func (l *Linter) lintFile(src string) lintResult {
 			err = l.lintQuarto(file)
 		case ".rst":
 			err = l.lintRST(file)
+		case ".typ":
+			err = l.lintTypst(file)
 		case ".xml", ".xsd":
 			err = l.lintXML(file)
 		case ".dita":
@@ -611,6 +617,11 @@ func (l *Linter) stopExternal() {
 		l.adoc.stop()
 		l.adoc = nil
 		l.adocOnce = sync.Once{}
+	}
+	if l.typst != nil {
+		l.typst.stop()
+		l.typst = nil
+		l.typstPoolOnce = sync.Once{}
 	}
 	if l.rst != nil {
 		l.rst.stop()
