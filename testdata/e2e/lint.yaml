@@ -159,6 +159,19 @@ cases:
       test.cc:20:5:vale.Annotations:'XXX' left in text
       test.cc:23:37:vale.Annotations:'XXX' left in text
 
+  - name: scss
+    about: "#1019 -- SCSS lints like Sass: comments are prose, selectors,
+      values, and strings are code"
+    args: test.scss
+    exit: 0
+    want: |
+      test.scss:1:4:vale.Annotations:'NOTE' left in text
+      test.scss:8:4:vale.Annotations:'XXX' left in text
+      test.scss:18:6:vale.Annotations:'TODO' left in text
+      test.scss:37:50:vale.Annotations:'XXX' left in text
+    absent:
+      - FIXME
+
   - name: clojure
     args: test.clj
     exit: 0
