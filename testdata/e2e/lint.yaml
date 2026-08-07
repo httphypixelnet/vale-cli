@@ -379,7 +379,8 @@ cases:
 
   - name: qml-fragments
     about: doc comments in QML sources lint as QDoc through `[formats]`;
-      the QML code itself is never prose
+      the QML code itself -- objects, bindings, functions, strings, line
+      comments, and snippet markers -- is never prose
     files:
       .vale.ini: |
         StylesPath = styles
@@ -390,6 +391,7 @@ cases:
 
         [*.qml]
         T.Tok = YES
+        T.Note = YES
       styles/T/Tok.yml: |
         extends: existence
         message: "'%s' in a doc comment"
@@ -397,24 +399,63 @@ cases:
         nonword: true
         raw:
           - ZQX
-      Button.qml: |
+      styles/T/Note.yml: |
+        extends: existence
+        message: "'%s' in a note"
+        scope: class.note
+        level: error
+        nonword: true
+        tokens:
+          - ZQX
+      Slider.qml: |
         import QtQuick
 
         /*!
-            \qmltype Button
+            \qmltype Slider
+            \inqmlmodule Custom.Controls
             \brief A ZQX in the brief.
 
+            A ZQX in body prose. Another sentence follows it.
+
             \section1 A ZQX heading
+
+            \code
+            Slider { value: ZQX }
+            \endcode
+
+            \note A ZQX in a note.
         */
-        Button {
+        Item {
+            id: root
+
+            //! [0]
             // A ZQX in a line comment stays code.
-            width: ZQX
+            property real value: 0 // a trailing ZQX comment is code too
+            //! [0]
+
+            /*
+                A ZQX in a plain block comment still lints.
+            */
+            function formatValue(v) {
+                var label = "a ZQX in a string is code";
+                return label + v;
+            }
+
+            /*!
+                \qmlproperty real Slider::value
+                A second block: its ZQX follows a topic line.
+            */
         }
-    args: Button.qml
+    args: Slider.qml
     exit: 1
     want: |
-      Button.qml:5:14:T.Tok:'ZQX' in a doc comment
-      Button.qml:7:17:T.Tok:'ZQX' in a doc comment
+      Slider.qml:6:14:T.Tok:'ZQX' in a doc comment
+      Slider.qml:8:7:T.Tok:'ZQX' in a doc comment
+      Slider.qml:10:17:T.Tok:'ZQX' in a doc comment
+      Slider.qml:16:13:T.Note:'ZQX' in a note
+      Slider.qml:16:13:T.Tok:'ZQX' in a doc comment
+      Slider.qml:27:11:T.Tok:'ZQX' in a doc comment
+      Slider.qml:36:29:T.Tok:'ZQX' in a doc comment
 
   - name: quarto
     about: "#793 -- fenced divs, attributes, and shortcodes are markup, div
@@ -560,6 +601,18 @@ cases:
       test.rs:5:17:vale.Annotations:'TODO' left in text
       test.rs:7:4:vale.Annotations:'FIXME' left in text
       test.rs:9:5:vale.Annotations:'XXX' left in text
+
+  - name: qml
+    args: test.qml
+    exit: 0
+    want: |
+      test.qml:1:4:vale.Annotations:'NOTE' left in text
+      test.qml:9:4:vale.Annotations:'XXX' left in text
+      test.qml:17:8:vale.Annotations:'TODO' left in text
+      test.qml:23:33:vale.Annotations:'TODO' left in text
+      test.qml:41:16:vale.Annotations:'XXX' left in text
+    absent:
+      - FIXME
 
   - name: r
     args: test.r
