@@ -213,6 +213,47 @@ cases:
         ]
       }
 
+  - name: issue-791
+    about: "#791 -- a tight list item with a nested list is its own `list`
+      block: an end-anchored rule sees the item's ending, not the nested
+      child's, and every unpunctuated item is reported at its final word"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.md]
+        T.ListPunct = YES
+      styles/T/ListPunct.yml: |
+        extends: existence
+        message: "Must put the ending punctuation at the end of a list item."
+        nonword: true
+        level: error
+        scope: list
+        tokens:
+          - '[^.!?]\s*$'
+      test.md: |
+        # Testing
+
+        ## Unordered Lists with Different Bullets
+
+        - Item with punctuation.
+        + Item without punctuation
+        * Another item with punctuation.
+
+        ## Ordered Lists
+
+        1. First ordered item with punctuation.
+        2. Second ordered item without punctuation
+            - Nested unordered with punctuation.
+            + Nested unordered without punctuation
+    args: test.md
+    exit: 1
+    want: |
+      test.md:6:26:T.ListPunct:Must put the ending punctuation at the end of a list item.
+      test.md:12:42:T.ListPunct:Must put the ending punctuation at the end of a list item.
+      test.md:14:42:T.ListPunct:Must put the ending punctuation at the end of a list item.
+
   - name: nested-markup
     dir: misc/markup
     args: .

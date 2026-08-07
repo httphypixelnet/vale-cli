@@ -122,6 +122,20 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 				walker.close()
 			}
 		} else if tokt == html.StartTagToken {
+			// Text buffered before a block-level child belongs to the
+			// enclosing element: a tight list item's own text, when a nested
+			// list opens inside it. Lint it now, under the parent's scope;
+			// left in the buffer it fuses with the child's first item, an
+			// end-anchored rule sees the child's ending, and the parent item
+			// never reaches `list`-scoped rules on its own. See #791.
+			if !core.StringInSlice(txt, inlineTags) && !core.StringInSlice(txt, voidTags) &&
+				strings.TrimSpace(buf.String()) != "" {
+				if err := l.lintScope(f, walker, buf.String()); err != nil {
+					return err
+				}
+				walker.reset()
+				buf.Reset()
+			}
 			if (txt == "em" || txt == "b") && walker.lastTag() == "code" {
 				// FIXME: See https://github.com/errata-ai/vale/issues/421
 				txt = "code"
