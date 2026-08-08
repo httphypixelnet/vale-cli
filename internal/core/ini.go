@@ -85,12 +85,19 @@ func loadVocab(root string, cfg *Config) error {
 	return err
 }
 
-func validateLevel(key, val string, cfg *Config) bool {
+// validateLevel reports whether `key` names a rule that should run, recording
+// any level it was given in `levels`.
+//
+// A level set under a section belongs to that section. Writing every one into
+// a single map made the last section in the file decide the level everywhere,
+// so `Vale.Spelling = warning` for Markdown quietly downgraded HTML too. See
+// #965.
+func validateLevel(key, val string, levels map[string]string) bool {
 	options := []string{"YES", "suggestion", "warning", "error"}
 	if val == "NO" || !StringInSlice(val, options) {
 		return false
 	} else if val != "YES" {
-		cfg.RuleToLevel[key] = val
+		levels[key] = val
 	}
 	return true
 }
@@ -419,7 +426,7 @@ func processConfig(uCfg *ini.File, cfg *Config, dry bool) (*ini.File, error) {
 			msg := fmt.Sprintf("'%s' is a syntax-specific option", k)
 			return nil, NewE201FromTarget(msg, k, cfg.RootINI)
 		} else {
-			cfg.GChecks[k] = validateLevel(k, global.Key(k).String(), cfg)
+			cfg.GChecks[k] = validateLevel(k, global.Key(k).String(), cfg.RuleToLevel)
 			cfg.Checks = append(cfg.Checks, k)
 		}
 	}
@@ -437,6 +444,7 @@ func processConfig(uCfg *ini.File, cfg *Config, dry bool) (*ini.File, error) {
 		cfg.SecToPat[sec] = pat
 
 		syntaxMap := make(map[string]bool)
+		levelMap := make(map[string]string)
 		for _, k := range uCfg.Section(sec).KeyStrings() {
 			if _, option := coreOpts[k]; option {
 				return nil, NewE201FromTarget(fmt.Sprintf(coreError, k), k, cfg.RootINI)
@@ -445,12 +453,13 @@ func processConfig(uCfg *ini.File, cfg *Config, dry bool) (*ini.File, error) {
 					return nil, err
 				}
 			} else {
-				syntaxMap[k] = validateLevel(k, uCfg.Section(sec).Key(k).String(), cfg)
+				syntaxMap[k] = validateLevel(k, uCfg.Section(sec).Key(k).String(), levelMap)
 				cfg.Checks = append(cfg.Checks, k)
 			}
 		}
 		cfg.RuleKeys = append(cfg.RuleKeys, sec)
 		cfg.SChecks[sec] = syntaxMap
+		cfg.SLevels[sec] = levelMap
 	}
 
 	return uCfg, nil

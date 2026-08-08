@@ -189,28 +189,29 @@ type CLIFlags struct {
 // Config holds the configuration values from both the CLI and `.vale.ini`.
 type Config struct {
 	// General configuration
-	BlockIgnores      map[string][]string        // A list of blocks to ignore
-	Checks            []string                   // All checks to load
-	Formats           map[string]string          // A map of unknown -> known formats
-	Asciidoctor       map[string]string          // A map of asciidoctor attributes
-	FormatToLang      map[string]string          // A map of format to lang ID
-	GBaseStyles       []string                   // Global base style
-	GChecks           map[string]bool            // Global checks
-	IgnoredClasses    []string                   // A list of HTML classes to ignore
-	IgnoredScopes     []string                   // A list of HTML tags to ignore
-	MinAlertLevel     int                        // Lowest alert level to display
-	Vocab             []string                   // The active project
-	RuleToLevel       map[string]string          // Single-rule level changes
-	SBaseStyles       map[string][]string        // Syntax-specific base styles
-	SChecks           map[string]map[string]bool // Syntax-specific checks
-	SkippedScopes     []string                   // A list of HTML blocks to ignore
-	Stylesheets       map[string]string          // XSLT stylesheet
-	TokenIgnores      map[string][]string        // A list of tokens to ignore
-	CommentDelimiters map[string][2]string       // Strings to treat as comment delimiters. Indicates the start and end delimiters.
-	WordTemplate      string                     // The template used in YAML -> regexp list conversions
-	RootINI           string                     // the path to the project's .vale.ini file
-	Paths             []string                   // A list of paths to search for styles
-	ConfigFiles       []string                   // A list of configuration files to load
+	BlockIgnores      map[string][]string          // A list of blocks to ignore
+	Checks            []string                     // All checks to load
+	Formats           map[string]string            // A map of unknown -> known formats
+	Asciidoctor       map[string]string            // A map of asciidoctor attributes
+	FormatToLang      map[string]string            // A map of format to lang ID
+	GBaseStyles       []string                     // Global base style
+	GChecks           map[string]bool              // Global checks
+	IgnoredClasses    []string                     // A list of HTML classes to ignore
+	IgnoredScopes     []string                     // A list of HTML tags to ignore
+	MinAlertLevel     int                          // Lowest alert level to display
+	Vocab             []string                     // The active project
+	RuleToLevel       map[string]string            // Single-rule level changes
+	SBaseStyles       map[string][]string          // Syntax-specific base styles
+	SChecks           map[string]map[string]bool   // Syntax-specific checks
+	SLevels           map[string]map[string]string // Syntax-specific level changes
+	SkippedScopes     []string                     // A list of HTML blocks to ignore
+	Stylesheets       map[string]string            // XSLT stylesheet
+	TokenIgnores      map[string][]string          // A list of tokens to ignore
+	CommentDelimiters map[string][2]string         // Strings to treat as comment delimiters. Indicates the start and end delimiters.
+	WordTemplate      string                       // The template used in YAML -> regexp list conversions
+	RootINI           string                       // the path to the project's .vale.ini file
+	Paths             []string                     // A list of paths to search for styles
+	ConfigFiles       []string                     // A list of configuration files to load
 
 	AcceptedTokens []string `json:"-"` // Project-specific vocabulary (okay)
 	RejectedTokens []string `json:"-"` // Project-specific vocabulary (avoid)
@@ -242,6 +243,7 @@ func NewConfig(flags *CLIFlags) (*Config, error) {
 	cfg.RuleToLevel = make(map[string]string)
 	cfg.SBaseStyles = make(map[string][]string)
 	cfg.SChecks = make(map[string]map[string]bool)
+	cfg.SLevels = make(map[string]map[string]string)
 	cfg.SecToPat = make(map[string]glob.Glob)
 	cfg.Stylesheets = make(map[string]string)
 	cfg.TokenIgnores = make(map[string][]string)

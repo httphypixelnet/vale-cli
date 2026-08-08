@@ -427,12 +427,26 @@ func (l *Linter) lintBlock(f *core.File, blk nlp.Block, lines, pad int, lookup b
 			if f.QueryComments(r.name + "[" + found[i][j].Match + "]") {
 				continue
 			}
-			core.FormatAlert(&found[i][j], info.Limit, info.Level, r.name)
+			setLevel(&found[i][j], f, info, r.name)
 			f.AddAlert(found[i][j], blk, lines, pad, lookup)
 		}
 	}
 
 	return nil
+}
+
+// setLevel finishes an alert, reporting it at the level this file gives its
+// rule.
+//
+// Assigning the severity rather than leaving it to FormatAlert is what makes a
+// per-format level take effect: a check builds its alerts with the level it was
+// compiled with already set, and FormatAlert only fills a severity that is
+// still empty. See #965.
+func setLevel(a *core.Alert, f *core.File, info check.Definition, name string) {
+	level := f.Level(name, info.Level)
+
+	core.FormatAlert(a, info.Limit, level, name)
+	a.Severity = level
 }
 
 // lintBlockSerial is lintBlock without the concurrency, and without what it
@@ -454,7 +468,7 @@ func (l *Linter) lintBlockSerial(f *core.File, blk nlp.Block, rules []scopedRule
 			if f.QueryComments(name + "[" + alerts[i].Match + "]") {
 				continue
 			}
-			core.FormatAlert(&alerts[i], info.Limit, info.Level, name)
+			setLevel(&alerts[i], f, info, name)
 			f.AddAlert(alerts[i], blk, lines, pad, lookup)
 		}
 	}
@@ -561,7 +575,9 @@ func (l *Linter) shouldRun(name string, f *core.File, chk check.Rule) bool {
 	if f.QueryComments(name) {
 		// It has been disabled via an in-text comment.
 		return false
-	} else if core.LevelToInt[details.Level] < minLevel {
+	} else if core.LevelToInt[f.Level(name, details.Level)] < minLevel {
+		// The level this file gives the rule, which a section may have changed
+		// for this format alone. See #965.
 		return false
 	}
 

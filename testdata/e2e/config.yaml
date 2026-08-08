@@ -290,3 +290,45 @@ cases:
     exit: 0
     want: |
       test.md:1:11:write-good.Weasel:'very' is a weasel word!
+
+  - name: level-per-syntax
+    about: "#965 -- a level set under one section belongs to that section. It
+      used to be collected globally, so the last section in the file decided
+      the level for every format. Here Markdown is downgraded below
+      MinAlertLevel and drops out; HTML, sharing the style, does not."
+    files:
+      test.html: |
+        <p>This is a very important sentence.</p>
+      _vale: |
+        StylesPath = ../../styles/
+        MinAlertLevel = warning
+
+        [*.{html,md}]
+        BasedOnStyles = write-good
+
+        [*.md]
+        write-good.Weasel = suggestion
+    args: .
+    exit: 0
+    want: |
+      test.html:1:14:write-good.Weasel:'very' is a weasel word!
+
+  - name: level-per-syntax-raised
+    about: "#965 -- and the other direction: Markdown alone is raised to meet
+      MinAlertLevel, so it reports where HTML stays quiet."
+    files:
+      test.html: |
+        <p>This is a very important sentence.</p>
+      _vale: |
+        StylesPath = ../../styles/
+        MinAlertLevel = error
+
+        [*.{html,md}]
+        BasedOnStyles = write-good
+
+        [*.md]
+        write-good.Weasel = error
+    args: .
+    exit: 1
+    want: |
+      test.md:1:11:write-good.Weasel:'very' is a weasel word!

@@ -219,3 +219,136 @@ func Test_shadowLoad_sectionsDoNotInherit(t *testing.T) {
 		t.Errorf("[*.txt] should hold only its own styles; got %v", got)
 	}
 }
+
+// A level set under a section belongs to that section. Collecting them all in
+// one map let the last section in the file decide the level everywhere. See
+// #965.
+func Test_processConfig_sectionLevels(t *testing.T) {
+	cases := []struct {
+		description string
+		body        string
+		levels      map[string]map[string]string
+		global      map[string]string
+	}{
+		{
+			description: "one section overrides a shared style",
+			body: `[*.{html,md}]
+BasedOnStyles = Vale
+
+[*.md]
+Vale.Spelling = warning
+`,
+			levels: map[string]map[string]string{
+				"*.{html,md}": {},
+				"*.md":        {"Vale.Spelling": "warning"},
+			},
+			global: map[string]string{},
+		},
+		{
+			description: "each section keeps its own level",
+			body: `[*.html]
+Vale.Spelling = error
+
+[*.md]
+Vale.Spelling = warning
+`,
+			levels: map[string]map[string]string{
+				"*.html": {"Vale.Spelling": "error"},
+				"*.md":   {"Vale.Spelling": "warning"},
+			},
+			global: map[string]string{},
+		},
+		{
+			description: "a level under [*] stays global",
+			body: `[*]
+Vale.Spelling = suggestion
+
+[*.md]
+BasedOnStyles = Vale
+`,
+			levels: map[string]map[string]string{
+				"*.md": {},
+			},
+			global: map[string]string{"Vale.Spelling": "suggestion"},
+		},
+		{
+			description: "YES and NO carry no level",
+			body: `[*.md]
+Vale.Spelling = YES
+Vale.Repetition = NO
+`,
+			levels: map[string]map[string]string{
+				"*.md": {},
+			},
+			global: map[string]string{},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			uCfg, err := shadowLoad([]byte(c.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			conf, err := NewConfig(&CLIFlags{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err = processConfig(uCfg, conf, false); err != nil {
+				t.Fatal(err)
+			}
+
+			for sec, want := range c.levels {
+				got := conf.SLevels[sec]
+				if len(got) != len(want) {
+					t.Fatalf("SLevels[%q] = %v, want %v", sec, got, want)
+				}
+				for k, v := range want {
+					if got[k] != v {
+						t.Errorf("SLevels[%q][%q] = %q, want %q", sec, k, got[k], v)
+					}
+				}
+			}
+
+			if len(conf.RuleToLevel) != len(c.global) {
+				t.Fatalf("RuleToLevel = %v, want %v", conf.RuleToLevel, c.global)
+			}
+			for k, v := range c.global {
+				if conf.RuleToLevel[k] != v {
+					t.Errorf("RuleToLevel[%q] = %q, want %q", k, conf.RuleToLevel[k], v)
+				}
+			}
+		})
+	}
+}
+
+// A file reports a rule at the level its own sections gave it, falling back to
+// the level the rule was compiled with.
+func TestFileLevel(t *testing.T) {
+	f := File{Levels: map[string]string{
+		"Vale.Spelling": "warning",
+		"proselint":     "suggestion",
+	}}
+
+	tests := []struct {
+		name     string
+		rule     string
+		compiled string
+		want     string
+	}{
+		{"the rule itself", "Vale.Spelling", "error", "warning"},
+		{"its style", "proselint.Typography", "error", "suggestion"},
+		{"neither", "Microsoft.Wordiness", "error", "error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := f.Level(tt.rule, tt.compiled); got != tt.want {
+				t.Errorf("Level(%q, %q) = %q, want %q",
+					tt.rule, tt.compiled, got, tt.want)
+			}
+		})
+	}
+}

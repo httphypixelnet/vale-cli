@@ -42,6 +42,11 @@ type File struct {
 	Checks     map[string]bool   // syntax-specific checks assigned in .vale
 	ChkToCtx   map[string]string // maps a temporary context to a particular check
 
+	// Levels holds the level each rule was given by the sections matching this
+	// file, which is not the same as the level it was compiled with: the same
+	// rule can be an error in one format and a warning in another. See #965.
+	Levels map[string]string
+
 	// chkMasked counts, per check and match text, the occurrences already
 	// masked into ChkToCtx this block. An occurrence a prior alert consumed
 	// is gone from the context, so it must not widen a later alert's
@@ -123,6 +128,7 @@ func NewFile(src string, config *Config) (*File, error) {
 
 	baseStyles := config.GBaseStyles
 	checks := make(map[string]bool)
+	levels := make(map[string]string)
 
 	for _, fp := range filepaths {
 		for _, sec := range config.StyleKeys {
@@ -135,6 +141,11 @@ func NewFile(src string, config *Config) (*File, error) {
 			if pat, found := config.SecToPat[sec]; found && pat.Match(fp) {
 				for k, v := range config.SChecks[sec] {
 					checks[k] = v
+				}
+				// Sections are visited in the order they were written, so a
+				// later one wins -- for this file, and no other. See #965.
+				for k, v := range config.SLevels[sec] {
+					levels[k] = v
 				}
 			}
 		}
@@ -171,7 +182,8 @@ func NewFile(src string, config *Config) (*File, error) {
 
 	file := File{
 		NormedExt: ext, Format: format, RealExt: filepath.Ext(path),
-		BaseStyles: baseStyles, Checks: checks, Lines: lines, Content: content,
+		BaseStyles: baseStyles, Checks: checks, Levels: levels,
+		Lines: lines, Content: content,
 		Comments: make(map[string]bool), history: make(map[string]int),
 		simple: config.Flags.Simple, Transform: transform,
 		limits: make(map[string]int), Path: path, Metrics: make(map[string]int),
@@ -571,4 +583,18 @@ func (f *File) SetMetaScope(scope string) {
 	} else {
 		f.MetaScope = ""
 	}
+}
+
+// Level returns the level `name` should report at in this file, falling back
+// to the level it was compiled with.
+//
+// A rule's own level covers it; a level set for its style covers the rest of
+// that style, mirroring how the two are resolved at compile time.
+func (f *File) Level(name, compiled string) string {
+	if level, ok := f.Levels[name]; ok {
+		return level
+	} else if level, ok = f.Levels[StyleName(name)]; ok {
+		return level
+	}
+	return compiled
 }
