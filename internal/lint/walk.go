@@ -88,6 +88,14 @@ type walker struct {
 	// since their position is derived from its own. Reset with the block.
 	inline []inlineCapture
 
+	// pending holds the attribute values of the element just opened, waiting
+	// to be masked out of the context. They can't be masked on the start tag
+	// itself: an autolink's `href` and its text are the same source bytes, so
+	// masking the attribute leaves the text token to find its string somewhere
+	// else in the document -- and `idx`, which only moves forward, then places
+	// every later block on that line. See #847.
+	pending []string
+
 	begin int
 	end   int
 
@@ -126,7 +134,22 @@ func (w *walker) update(txt string, tokt html.TokenType) {
 	}
 }
 
+// flush masks the attribute values held since the last start tag.
+//
+// `text` is the element's own text, if it has arrived; an attribute equal to it
+// is dropped rather than masked, because the two are one run of source and
+// masking it twice consumes an occurrence that belongs to something else.
+func (w *walker) flush(text string) {
+	for _, val := range w.pending {
+		if val != text {
+			w.update(val, html.TextToken)
+		}
+	}
+	w.pending = nil
+}
+
 func (w *walker) reset() {
+	w.flush("")
 	for _, s := range w.queue {
 		w.update(s, html.TextToken)
 	}
@@ -143,6 +166,10 @@ func (w *walker) getCtx() string {
 
 func (w *walker) append(text string) {
 	if text != "" {
+		// Before the search below, so the text finds its own occurrence, and
+		// after the drop, so an autolink's `href` doesn't take it first.
+		w.flush(text)
+
 		pos := w.advance(text)
 		if pos > -1 {
 			w.idx = pos
@@ -340,6 +367,9 @@ func (w *walker) walk() (html.TokenType, html.Token, string) {
 func (w *walker) replaceToks(tok html.Token) {
 	tags := core.StringInSlice(tok.Data, []string{
 		"img", "a", "p", "script", "h1", "h2", "h3", "h4", "h5", "h6", "span"})
+	// Anything still waiting belongs to an element that had no text of its own.
+	w.flush("")
+
 	if tags {
 		names := []string{"href", "id", "src", "alt"}
 		if w.ext == ".html" {
@@ -356,7 +386,7 @@ func (w *walker) replaceToks(tok html.Token) {
 				if a.Key == "href" {
 					a.Val, _ = url.QueryUnescape(a.Val)
 				}
-				w.update(a.Val, html.TextToken)
+				w.pending = append(w.pending, a.Val)
 			}
 		}
 	}

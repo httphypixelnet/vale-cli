@@ -130,3 +130,64 @@ cases:
     want: |
       guides/b.md:1:15:T.Tok:'ZQX' found
       tutorials/a.md:1:27:T.Tok:'QQV' found
+
+  - name: repeated-autolink
+    about: "#847 -- an autolink's URL is one run of source, reported twice by
+      the parser; masking the `href` copy used to send the text's search to the
+      next identical URL in the document, moving every later block's alerts
+      onto its line. The three files differ only in lines that hold no alert,
+      so all three report the same two."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.md]
+        BasedOnStyles = T
+      styles/T/GitHub.yml: |
+        extends: substitution
+        message: Use '%s' instead of '%s'
+        level: warning
+        ignorecase: true
+        swap:
+          GitHub: GitHub
+      trailing-prose.md: |
+        http://github.com bar
+
+        [github](#whatever)
+        [github1](#whatever)
+        [github.](#whatever)
+
+        https://jwodder.github.io/
+        http://github.com
+
+        whatever
+      trailing-url.md: |
+        http://github.com bar
+
+        [github](#whatever)
+        [github1](#whatever)
+        [github.](#whatever)
+
+        https://jwodder.github.io/
+
+        http://github.com
+      no-leading-url.md: |
+        bar
+
+        [github](#whatever)
+        [github1](#whatever)
+        [github.](#whatever)
+
+        https://jwodder.github.io/
+
+        http://github.com
+    args: .
+    exit: 0
+    want: |
+      no-leading-url.md:3:2:T.GitHub:Use 'GitHub' instead of 'github'
+      no-leading-url.md:5:2:T.GitHub:Use 'GitHub' instead of 'github'
+      trailing-prose.md:3:2:T.GitHub:Use 'GitHub' instead of 'github'
+      trailing-prose.md:5:2:T.GitHub:Use 'GitHub' instead of 'github'
+      trailing-url.md:3:2:T.GitHub:Use 'GitHub' instead of 'github'
+      trailing-url.md:5:2:T.GitHub:Use 'GitHub' instead of 'github'

@@ -148,3 +148,52 @@ func TestWalkerClasses(t *testing.T) {
 		})
 	}
 }
+
+// An element's attributes are masked out of the context, but not the source
+// bytes its own text still has to find. An autolink writes the URL once and
+// the parser reports it twice -- as `href` and as text -- so masking the
+// attribute first sent the text's search to the next copy of that URL, wherever
+// in the document it happened to be. See #847.
+func TestWalkerFlush(t *testing.T) {
+	tests := []struct {
+		name    string
+		pending []string
+		text    string
+		want    string
+	}{
+		{
+			name:    "autolink keeps its own bytes",
+			pending: []string{"http://github.com"},
+			text:    "http://github.com",
+			want:    "http://github.com here\nand http://github.com there\n",
+		},
+		{
+			name:    "a link target is masked",
+			pending: []string{"http://github.com"},
+			text:    "read this",
+			want:    "@@@@@@@@@@@@@@@@@ here\nand http://github.com there\n",
+		},
+		{
+			name:    "no text of its own",
+			pending: []string{"http://github.com"},
+			text:    "",
+			want:    "@@@@@@@@@@@@@@@@@ here\nand http://github.com there\n",
+		},
+	}
+
+	const src = "http://github.com here\nand http://github.com there\n"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &walker{context: []byte(src), pending: tt.pending}
+
+			w.flush(tt.text)
+
+			if got := w.getCtx(); got != tt.want {
+				t.Errorf("flush(%q) left %q, want %q", tt.text, got, tt.want)
+			}
+			if w.pending != nil {
+				t.Errorf("pending = %v, want nil", w.pending)
+			}
+		})
+	}
+}
