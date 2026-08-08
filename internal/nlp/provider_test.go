@@ -79,3 +79,64 @@ func TestComputeSplit(t *testing.T) {
 		}
 	})
 }
+
+// A block that inline markup has rewritten is nowhere in its context, so a
+// match inside it can only be placed through the runs recorded as it was read.
+// See #502.
+func TestBlockSourceOffset(t *testing.T) {
+	// "<p>a <b>b</b> c</p>" read as "a b c".
+	runs := []Run{
+		{At: 0, Src: 3, N: 2},  // "a "
+		{At: 2, Src: 8, N: 1},  // "b"
+		{At: 3, Src: 13, N: 2}, // " c"
+	}
+
+	tests := []struct {
+		name  string
+		blk   Block
+		index int
+		want  int
+	}{
+		{"first run", Block{Offset: -1, Runs: runs}, 0, 3},
+		{"second run", Block{Offset: -1, Runs: runs}, 2, 8},
+		{"third run", Block{Offset: -1, Runs: runs}, 4, 14},
+		{"past the end", Block{Offset: -1, Runs: runs}, 5, -1},
+		{"unmapped", Block{Offset: -1}, 0, -1},
+		{"a placed block ignores runs", Block{Offset: 100, Runs: runs}, 2, 102},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.blk.SourceOffset(tt.index); got != tt.want {
+				t.Errorf("SourceOffset(%d) = %d, want %d", tt.index, got, tt.want)
+			}
+		})
+	}
+}
+
+// Segmenting a block hands its runs down to each sentence, rebased onto that
+// sentence's own text -- otherwise only whole blocks could be placed.
+func TestBlockWithRuns(t *testing.T) {
+	// "One. <b>Two</b>." read as "One. Two." -- the sentence "Two." starts at 5.
+	parent := []Run{
+		{At: 0, Src: 0, N: 5}, // "One. "
+		{At: 5, Src: 8, N: 4}, // "Two."
+	}
+
+	child := Block{Text: "Two.", Offset: -1}.withRuns(parent, 5)
+	if got := child.SourceOffset(0); got != 8 {
+		t.Errorf("SourceOffset(0) = %d, want 8", got)
+	}
+
+	// The first sentence keeps only the run it overlaps.
+	first := Block{Text: "One. ", Offset: -1}.withRuns(parent, 0)
+	if len(first.Runs) != 1 || first.Runs[0] != (Run{At: 0, Src: 0, N: 5}) {
+		t.Errorf("Runs = %v, want one run covering %q", first.Runs, "One. ")
+	}
+
+	// An unplaced child inherits nothing rather than misplacing itself.
+	lost := Block{Text: "Two.", Offset: -1}.withRuns(parent, -1)
+	if lost.Runs != nil {
+		t.Errorf("Runs = %v, want nil", lost.Runs)
+	}
+}

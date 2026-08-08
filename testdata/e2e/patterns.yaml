@@ -191,3 +191,49 @@ cases:
       trailing-prose.md:5:2:T.GitHub:Use 'GitHub' instead of 'github'
       trailing-url.md:3:2:T.GitHub:Use 'GitHub' instead of 'github'
       trailing-url.md:5:2:T.GitHub:Use 'GitHub' instead of 'github'
+
+  - name: inline-markup-position
+    about: "#502 -- a word split from its neighbour by an inline tag leaves the
+      block's text nowhere in the source. Each alert is still placed by the
+      runs the block was read from, rather than dropped or given the width of
+      the line."
+    files:
+      .vale.ini: |
+        MinAlertLevel = suggestion
+
+        [*.html]
+        BasedOnStyles = Vale
+        Vale.Spelling = NO
+        Vale.Terms = NO
+        Vale.Avoid = NO
+      sample.html: |
+        <html>
+        <body>
+          <p>This paragraph has has a duplication.</p>
+          <p>This paragraph has <b>has</b> a duplication.</p>
+          <p>
+            This paragraph has has a
+            duplication on multiple lines.
+          </p>
+
+          <p>This paragraph has <b>has</b> an <font>obsolete</font> tag</p>
+          <p>
+            This paragraph has <b>has</b> a
+            duplication on multiple lines.
+          </p>
+          <p>
+            This paragraph has
+            has a duplication
+            across lines.
+          </p>
+        </body>
+        </html>
+    args: sample.html
+    exit: 1
+    want: |
+      sample.html:3:21:Vale.Repetition:'has' is repeated!
+      sample.html:4:21:Vale.Repetition:'has' is repeated!
+      sample.html:6:20:Vale.Repetition:'has' is repeated!
+      sample.html:10:21:Vale.Repetition:'has' is repeated!
+      sample.html:12:20:Vale.Repetition:'has' is repeated!
+      sample.html:16:20:Vale.Repetition:'has' is repeated!

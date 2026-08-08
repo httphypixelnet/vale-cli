@@ -214,17 +214,16 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 					txt = txt[1:]
 				}
 				// Record where this run came from before it loses its identity
-				// in the block -- but only when something is going to ask. The
-				// mapping exists to place inline fragments, so a style that
-				// scopes none of them should not pay for it.
+				// in the block. It places inline fragments, and it places a
+				// match in a block that inline markup has made unfindable in
+				// the source -- `has <b>has</b>` arrives as `has has`, which is
+				// nowhere in the file. See #502.
 				//
 				// Only a run that survived extraction unchanged can be mapped;
 				// `clean` may have prefixed a space, which belongs to the block
 				// and not to the source.
-				if len(wanted) > 0 {
-					if body := strings.TrimLeft(txt, " "); body == raw {
-						walker.mapRun(buf.Len()+(len(txt)-len(body)), raw)
-					}
+				if body := strings.TrimLeft(txt, " "); body == raw {
+					walker.mapRun(buf.Len()+(len(txt)-len(body)), raw)
 				}
 				buf.WriteString(txt)
 				// Feed the same text to any inline element still open, so a
@@ -283,7 +282,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 			txt = strings.TrimLeft(txt, " ")
 			shift -= len(txt)
 
-			b := state.block(txt, withClasses(scope, state)+f.MetaScope+f.RealExt)
+			b := state.block(txt, withClasses(scope, state)+f.MetaScope+f.RealExt, shift)
 
 			// Prose, not just a block: a list item or a heading is made of
 			// sentences the same way a paragraph is, and only this path segments
@@ -317,7 +316,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 	// `paragraphs` means what the `paragraph` scope reaches -- this branch.
 	f.Metrics["paragraphs"]++
 
-	b := state.block(txt, withClasses("text", state)+f.MetaScope+f.RealExt)
+	b := state.block(txt, withClasses("text", state)+f.MetaScope+f.RealExt, 0)
 	if err := l.lintProse(f, b, state.lines, true); err != nil {
 		return err
 	}
@@ -418,7 +417,7 @@ func (l *Linter) lintTags(f *core.File, state *walker, tok html.Token) error {
 			if a.Key == "alt" && !ignored {
 				err := l.lintBlock(
 					f,
-					state.block(a.Val, "text.attr."+a.Key), state.lines, 0, false)
+					state.block(a.Val, "text.attr."+a.Key, 0), state.lines, 0, false)
 				if err != nil {
 					return err
 				}

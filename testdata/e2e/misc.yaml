@@ -259,7 +259,7 @@ cases:
     args: .
     exit: 1
     want: |
-      test.md:4:1:Markup.Repetition:"in" is repeated.
+      test.md:4:428:Markup.Repetition:"in" is repeated.
       test.md:50:11:Markup.SentSpacing:"d.A" must contain one and only one space.
 
   - name: inline-dashes

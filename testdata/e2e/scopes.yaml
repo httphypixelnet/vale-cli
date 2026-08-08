@@ -149,13 +149,17 @@ cases:
     want: ""
 
   - name: inline-spacing
-    about: "#1111, #1119"
+    about: "#1111, #1119. The adoc headings are #502: a token that markup
+      extraction introduced fails the strict threshold, and the alert is placed
+      on the heading rather than dropped for having nowhere to go."
     dir: inline-space
     args: .
     requires: asciidoctor
     exit: 1
     want: |
-      test.md:7:1:rules.InlineSpace:Use a non-breaking space before 'd\x{00A0}:'.
+      test.adoc:3:6:rules.InlineTitle:'Mixing ****************s' should use title-style capitalization.
+      test.adoc:5:6:rules.InlineTitle:'One Tree of ********s' should use title-style capitalization.
+      test.md:7:6:rules.InlineSpace:Use a non-breaking space before 'd\x{00A0}:'.
 
   - name: attr
     args: .

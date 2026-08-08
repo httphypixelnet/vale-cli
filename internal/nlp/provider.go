@@ -31,6 +31,52 @@ type Block struct {
 	// finds the first occurrence rather than the one that matched. A sentence
 	// repeated in a document is the common case.
 	Offset int
+
+	// Runs maps pieces of Text back to the source they were read from, for a
+	// block that has no Offset of its own.
+	//
+	// Extraction drops inline markup, so `has <b>has</b>` arrives as `has has`
+	// and the block is nowhere in Context as a whole. Its pieces are, though,
+	// and each was placed as it was read. See #502.
+	Runs []Run
+}
+
+// A Run is a piece of a block's text and where it came from: At indexes the
+// block, Src the source, and N is how long both are.
+type Run struct {
+	At, Src, N int
+}
+
+// SourceOffset returns where index i of Text sits in Context, or -1 if that
+// part of the block was never mapped.
+func (b *Block) SourceOffset(i int) int {
+	if b.Offset >= 0 {
+		return b.Offset + i
+	}
+	for _, r := range b.Runs {
+		if i >= r.At && i < r.At+r.N {
+			return r.Src + (i - r.At)
+		}
+	}
+	return -1
+}
+
+// withRuns returns a copy of b carrying the runs of `parent` that fall within
+// [start, start+len(b.Text)), rebased onto b's own text.
+func (b Block) withRuns(parent []Run, start int) Block {
+	if start < 0 || len(parent) == 0 {
+		return b
+	}
+
+	end := start + len(b.Text)
+	for _, r := range parent {
+		lo, hi := max(r.At, start), min(r.At+r.N, end)
+		if lo >= hi {
+			continue
+		}
+		b.Runs = append(b.Runs, Run{At: lo - start, Src: r.Src + (lo - r.At), N: hi - lo})
+	}
+	return b
 }
 
 // NewBlock makes a new Block with prepared text and a Selector.
@@ -149,22 +195,27 @@ func (n *Info) Compute(block *Block, split bool) ([]Block, error) {
 // cursor advances past each piece so that repeated text resolves to successive
 // occurrences rather than always the first -- which is the whole point of
 // tracking offsets instead of searching for them later.
-func offsetOf(blk *Block, base int, piece string, cursor *int) int {
-	if base < 0 || *cursor > len(blk.Text) {
-		return -1
+func offsetOf(blk *Block, base int, piece string, cursor *int) (int, int) {
+	if *cursor > len(blk.Text) {
+		return -1, -1
 	}
 
 	i := strings.Index(blk.Text[*cursor:], piece)
 	if i < 0 {
 		// A segmenter that rewrites text (a remote endpoint, say) can return
 		// something that is not a substring of the input.
-		return -1
+		return -1, -1
 	}
 
 	start := *cursor + i
 	*cursor = start + len(piece)
 
-	return base + start
+	if base < 0 {
+		// The piece is placed within the block, which is itself unplaced; the
+		// runs it inherits are what will locate it.
+		return start, -1
+	}
+	return start, base + start
 }
 
 func (n *Info) doNLP(blk *Block, seg segmenter, split bool) ([]Block, error) {
@@ -178,7 +229,8 @@ func (n *Info) doNLP(blk *Block, seg segmenter, split bool) ([]Block, error) {
 		cursor := 0
 		for _, p := range strings.SplitAfter(blk.Text, "\n\n") {
 			b := NewLinedBlock(ctx, p, "paragraph."+blk.Scope, idx)
-			blks = append(blks, b.at(offsetOf(blk, base, p, &cursor)))
+			start, off := offsetOf(blk, base, p, &cursor)
+			blks = append(blks, b.at(off).withRuns(blk.Runs, start))
 		}
 	}
 
@@ -190,14 +242,15 @@ func (n *Info) doNLP(blk *Block, seg segmenter, split bool) ([]Block, error) {
 				continue
 			}
 			b := NewLinedBlock(ctx, s, "sentence."+blk.Scope, idx)
-			blks = append(blks, b.at(offsetOf(blk, base, s, &cursor)))
+			start, off := offsetOf(blk, base, s, &cursor)
+			blks = append(blks, b.at(off).withRuns(blk.Runs, start))
 		}
 	}
 
 	// The block itself, which is what most rules run against. It needs the
 	// offset as much as its children do.
 	blks = append(
-		blks, NewLinedBlock(ctx, blk.Text, blk.Scope, idx).at(base))
+		blks, NewLinedBlock(ctx, blk.Text, blk.Scope, idx).at(base).withRuns(blk.Runs, 0))
 
 	return blks, nil
 }

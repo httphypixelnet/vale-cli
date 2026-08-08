@@ -3,6 +3,9 @@ package check
 import (
 	"testing"
 	"unicode/utf8"
+
+	"github.com/errata-ai/vale/v3/internal/core"
+	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
 // runeSpanToBytes underpins every anchored alert; an off-by-one here
@@ -115,5 +118,53 @@ func TestRe2LocMatchesReference(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// A block whose text inline markup rewrote has no offset of its own, and its
+// alerts used to fall back to a text search that placed them on the wrong line
+// -- or dropped them. Its runs place them exactly. See #502.
+func TestAnchorFromRuns(t *testing.T) {
+	// "  <p>ab <b>cd</b> e</p>" read as "ab cd e".
+	blk := nlp.Block{
+		Context: "  <p>ab <b>cd</b> e</p>",
+		Text:    "ab cd e",
+		Offset:  -1,
+		Runs: []nlp.Run{
+			{At: 0, Src: 5, N: 3},  // "ab "
+			{At: 3, Src: 11, N: 2}, // "cd"
+			{At: 5, Src: 17, N: 2}, // " e"
+		},
+	}
+
+	tests := []struct {
+		name     string
+		span     []int
+		want     []int
+		anchored bool
+	}{
+		// "ab cd" reaches from the first byte to the last, `<b>` included.
+		{"across the markup", []int{0, 5}, []int{5, 13}, true},
+		{"before it", []int{0, 2}, []int{5, 7}, true},
+		{"after it", []int{3, 5}, []int{11, 13}, true},
+		{"past the last run", []int{0, 30}, nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := core.Alert{Span: tt.span}
+
+			anchor(&a, blk)
+
+			if a.HasByteOffsets != tt.anchored {
+				t.Fatalf("HasByteOffsets = %v, want %v", a.HasByteOffsets, tt.anchored)
+			}
+			if !tt.anchored {
+				return
+			}
+			if a.Span[0] != tt.want[0] || a.Span[1] != tt.want[1] {
+				t.Errorf("Span = %v, want %v", a.Span, tt.want)
+			}
+		})
 	}
 }

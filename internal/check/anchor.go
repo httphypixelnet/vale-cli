@@ -23,7 +23,28 @@ import (
 // so their offsets do not address the original document; checking that the
 // text really sits where the offset claims is what keeps those out.
 func anchor(a *core.Alert, blk nlp.Block) {
-	if blk.Offset < 0 || len(a.Span) != 2 {
+	if len(a.Span) != 2 {
+		return
+	}
+
+	lo, hi, ok := runeSpanToBytes(blk.Text, a.Span[0], a.Span[1])
+	if !ok {
+		return
+	}
+
+	if blk.Offset < 0 {
+		// A block that inline markup has rewritten -- `has <b>has</b>` read as
+		// `has has` -- is nowhere in the document to be found, but each of its
+		// runs was placed as it was read, and that is enough to say where the
+		// match is. The span reaches from the first byte to the last, markup
+		// between them included, because that is its extent in the file. See
+		// #502.
+		from, to := blk.SourceOffset(lo), blk.SourceOffset(hi-1)
+		if from < 0 || to < from {
+			return
+		}
+		a.Span = []int{from, to + 1}
+		a.HasByteOffsets = true
 		return
 	}
 
@@ -33,11 +54,6 @@ func anchor(a *core.Alert, blk nlp.Block) {
 	// position may have been overwritten -- length-preservingly, which is what
 	// keeps the offset itself valid.
 	if blk.Offset+len(blk.Text) > len(blk.Context) {
-		return
-	}
-
-	lo, hi, ok := runeSpanToBytes(blk.Text, a.Span[0], a.Span[1])
-	if !ok {
 		return
 	}
 

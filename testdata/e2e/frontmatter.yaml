@@ -38,7 +38,7 @@ cases:
       test.rst:3:24:vale.Annotations:'NOTE' left in text
       test.rst:4:20:vale.Annotations:'XXX' left in text
       test.rst:10:34:vale.Annotations:'XXX' left in text
-      test.rst:56:19:vale.Annotations:'TODO' left in text
+      test.rst:43:45:vale.Annotations:'TODO' left in text
       test.rst:64:1:vale.Annotations:'NOTE' left in text
       test.rst:66:40:vale.Annotations:'TODO' left in text
       test.rst:69:3:vale.Annotations:'TODO' left in text

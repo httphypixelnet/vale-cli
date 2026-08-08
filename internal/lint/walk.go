@@ -13,18 +13,6 @@ import (
 	"github.com/errata-ai/vale/v3/internal/nlp"
 )
 
-// srcSpan maps a run of a block's stripped text back to where it came from in
-// the source.
-//
-// Extraction removes markup, so a block's text is not a substring of the source
-// and an index into one is not an index into the other. Recording each run as
-// it is read keeps the correspondence that would otherwise be lost.
-type srcSpan struct {
-	text int // where the run begins in the block's text
-	src  int // where it begins in the source
-	n    int // its length, the same in both
-}
-
 // inlineCapture is the text of one inline element, gathered as the block that
 // contains it is read.
 type inlineCapture struct {
@@ -80,7 +68,7 @@ type walker struct {
 	// spans maps this block's text back to the source, and srcCursor is how far
 	// the search for the next run has already gone. Separate from `cursor`,
 	// which places whole blocks and must not be moved by this.
-	spans     []srcSpan
+	spans     []nlp.Run
 	srcCursor int
 
 	// inline holds the inline elements captured within the current block --
@@ -266,7 +254,9 @@ func (w *walker) close() {
 	w.end = 0
 }
 
-func (w *walker) block(text, scope string) nlp.Block {
+// block builds the block for text, which begins `shift` bytes into the runs
+// recorded as it was read -- the space `clean` prefixes and lintScope trims.
+func (w *walker) block(text, scope string, shift int) nlp.Block {
 	line := w.idx
 
 	pos := w.advance(text)
@@ -277,7 +267,28 @@ func (w *walker) block(text, scope string) nlp.Block {
 	b := nlp.NewLinedBlock(w.getCtx(), text, scope, line)
 	b.Offset = w.locate(text)
 
+	// A block whose text is in the source verbatim needs nothing more; one
+	// holding inline markup is not there to be found, and only its runs can
+	// place a match inside it. See #502.
+	if b.Offset < 0 {
+		b.Runs = w.runs(shift, len(text))
+	}
+
 	return b
+}
+
+// runs returns the recorded runs covering [shift, shift+n) of the walker's
+// buffer, rebased onto a block that starts there.
+func (w *walker) runs(shift, n int) []nlp.Run {
+	var out []nlp.Run
+	for _, r := range w.spans {
+		lo, hi := max(r.At, shift), min(r.At+r.N, shift+n)
+		if lo >= hi {
+			continue
+		}
+		out = append(out, nlp.Run{At: lo - shift, Src: r.Src + (lo - r.At), N: hi - lo})
+	}
+	return out
 }
 
 // locate returns where text begins in the context, advancing the cursor past
@@ -344,15 +355,15 @@ func (w *walker) mapRun(at int, raw string) {
 
 	src := w.srcCursor + i
 	w.srcCursor = src + len(raw)
-	w.spans = append(w.spans, srcSpan{text: at, src: src, n: len(raw)})
+	w.spans = append(w.spans, nlp.Run{At: at, Src: src, N: len(raw)})
 }
 
 // sourceOffset returns where index `i` of the block's text sits in the source,
 // or -1 if that run was never mapped.
 func (w *walker) sourceOffset(i int) int {
 	for _, s := range w.spans {
-		if i >= s.text && i < s.text+s.n {
-			return s.src + (i - s.text)
+		if i >= s.At && i < s.At+s.N {
+			return s.Src + (i - s.At)
 		}
 	}
 	return -1
@@ -417,11 +428,12 @@ func (w *walker) replaceToks(tok html.Token) {
 //     more work: 38% slower overall. Worth revisiting with assignLoc rather
 //     than on its own; the two are coupled.
 //
-// That last attempt did surface a real defect: with the line taken from the
-// offset, an rst alert moved from 56:19 -- inside a literal block -- to 43:45,
-// the prose it actually belongs to. `testdata/features/frontmatter.feature`
-// still encodes the wrong position, and core.assignLoc has a standing NOTE
-// saying blk.Line is untrustworthy. Both are the same bug.
+// The line this returns is a fallback, and core.assignLoc has a standing NOTE
+// saying so. It matters less than it did: an alert in a block holding inline
+// markup is now placed by the runs the block was read from rather than by
+// searching from this line, which is what moved the rst alert in
+// `testdata/e2e/frontmatter.yaml` out of a literal block and onto the prose it
+// belongs to. What still comes through here is a block no run could place.
 func (w *walker) advance(text string) int {
 	ctx := w.getCtx()
 
