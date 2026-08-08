@@ -25,7 +25,25 @@ func (l *Linter) lintHTML(f *core.File) error {
 }
 
 type extensionConfig struct {
-	Normed, Real string
+	// Normed is the format the file is read as, which selects the parser and
+	// the delimiters below. Real is its extension on disk, and RealPath its
+	// path.
+	Normed, Real, RealPath string
+}
+
+// match reports whether a config section applies to this file.
+//
+// Sections are keyed on the file as it is on disk -- `[*.qmd]`, never `[*.md]`
+// by way of `[formats] qmd = md` -- which is how `BasedOnStyles` matches, and
+// the two have to agree: patterns that ignored text no rule was going to reach
+// would be pointless, and the reverse silently lints what the section says to
+// skip.
+//
+// The path is matched as well as the extension. Without it a section keyed on
+// one -- `[docs/*.md]` -- could never match, and its patterns were read,
+// compiled and then silently never applied. See #839.
+func (e extensionConfig) match(sec glob.Glob) bool {
+	return sec.Match(e.Real) || (e.RealPath != "" && sec.Match(e.RealPath))
 }
 
 var blockDelimiters = map[string]string{
@@ -53,7 +71,7 @@ func applyBlockPatterns(c *core.Config, exts extensionConfig, content string) (s
 		sec, err := glob.Compile(syntax)
 		if err != nil {
 			return s, err
-		} else if sec.Match(exts.Normed) || sec.Match(exts.Real) {
+		} else if exts.match(sec) {
 			for _, r := range regexes {
 				pat, errc := rx.Compile(r)
 				if errc != nil { //nolint:gocritic
@@ -106,7 +124,7 @@ func applyInlinePatterns(c *core.Config, exts extensionConfig, content string) (
 		sec, err := glob.Compile(syntax)
 		if err != nil {
 			return content, err
-		} else if sec.Match(exts.Normed) || sec.Match(exts.Real) {
+		} else if exts.match(sec) {
 			for _, r := range regexes {
 				pat, errc := rx.Compile(r)
 				if errc != nil {
@@ -138,7 +156,7 @@ func applyCommentPatterns(c *core.Config, exts extensionConfig, content string) 
 		sec, err := glob.Compile(syntax)
 		if err != nil {
 			return content, err
-		} else if sec.Match(exts.Normed) || sec.Match(exts.Real) {
+		} else if exts.match(sec) {
 			// This field was not assigned, so do nothing.
 			if delims[0] == "" && delims[1] == "" {
 				return content, nil

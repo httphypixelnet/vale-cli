@@ -100,3 +100,33 @@ cases:
       test2.rst:186:11:Vale.Spelling:Did you really mean 'tooltip'?
       test2.rst:188:45:Vale.Spelling:Did you really mean 'tooltip'?
       test2.rst:230:58:Vale.Spelling:Did you really mean 'renderButtons'?
+
+  - name: token-ignores-path-scoped
+    about: "#839 -- a section keyed on a path, not an extension, still applies
+      its ignore patterns"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.md]
+        BasedOnStyles = T
+
+        [tutorials/*.md]
+        TokenIgnores = (\[\[[^\]]+\]\])
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s' found"
+        level: error
+        nonword: true
+        raw:
+          - (?:ZQX|QQV)
+      tutorials/a.md: |
+        Ignored [[ZQX]] here, but QQV is not.
+      guides/b.md: |
+        Not ignored [[ZQX]] here.
+    args: .
+    exit: 1
+    want: |
+      guides/b.md:1:15:T.Tok:'ZQX' found
+      tutorials/a.md:1:27:T.Tok:'QQV' found

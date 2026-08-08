@@ -548,6 +548,47 @@ cases:
       test.qmd:4:30:T.InCallout:'ZQX' in a callout
       test.qmd:6:31:T.InCallout:'ZQX' in a callout
 
+  - name: quarto-math
+    about: "#839 -- inline `$…$` math is skipped like display math, but only
+      under Pandoc's delimiter rules, so `$5 and $10` stays prose"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.qmd]
+        BasedOnStyles = T
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s' found"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      test.qmd: |
+        Inline $ZQX$ is math.
+
+        So is $ZQX = f(ZQX)$, spaces and all.
+
+        And $ZQX =
+        f(ZQX)$ wrapped across lines.
+
+        $$
+        ZQX = f(ZQX)
+        $$
+
+        It costs $5 and ZQX $10 today.
+
+        A lone $5 leaves ZQX alone.
+
+        Escaped \$5 and \$10 leave ZQX alone.
+    args: test.qmd
+    exit: 1
+    want: |
+      test.qmd:12:17:T.Tok:'ZQX' found
+      test.qmd:14:18:T.Tok:'ZQX' found
+      test.qmd:16:28:T.Tok:'ZQX' found
+
   - name: myst-mapped
     about: a Markdown file opts into MyST with `[formats] md = myst`, and a
       directive's name scopes its content as a class

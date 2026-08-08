@@ -22,7 +22,7 @@ func Test_applyPatterns(t *testing.T) {
 					".md": {"{/*", "*/}"},
 				},
 			},
-			exts: extensionConfig{".md", ".md"},
+			exts: extensionConfig{Normed: ".md", Real: ".md"},
 			content: `
 This is the intro pagragraph.
 
@@ -37,7 +37,7 @@ This is the intro pagragraph.
 		{
 			description: "MDX comment in markdown, no custom comment delimiter",
 			conf:        core.Config{},
-			exts:        extensionConfig{".md", ".md"},
+			exts:        extensionConfig{Normed: ".md", Real: ".md"},
 			content: `
 This is the intro pagragraph.
 
@@ -56,7 +56,7 @@ This is the intro pagragraph.
 					".md": {"{/*", "*/}"},
 				},
 			},
-			exts: extensionConfig{".md", ".md"},
+			exts: extensionConfig{Normed: ".md", Real: ".md"},
 			content: `
 This is the intro pagragraph.
 
@@ -83,8 +83,71 @@ This is a comment
 					"cc": "md",
 				},
 			},
-			exts:     extensionConfig{".md", ".cc"},
+			exts:     extensionConfig{Normed: ".md", Real: ".cc"},
 			expected: "Call `\\c func` to start the process.",
+		},
+		{
+			description: "token ignore in a path-scoped section",
+			content:     "A test $g_i = p_i$ here.",
+			conf: core.Config{
+				TokenIgnores: map[string][]string{
+					"tutorials/*.md": {`(\$+[^\n$]+\$+)`},
+				},
+			},
+			exts: extensionConfig{
+				Normed:   ".md",
+				Real:     ".md",
+				RealPath: "tutorials/intro.md",
+			},
+			expected: "A test `$g_i = p_i$` here.",
+		},
+		{
+			description: "path-scoped section keyed on the mapped extension",
+			content:     "A test $g_i = p_i$ here.",
+			conf: core.Config{
+				TokenIgnores: map[string][]string{
+					"tutorials/*.md": {`(\$+[^\n$]+\$+)`},
+				},
+				Formats: map[string]string{
+					"qmd": "md",
+				},
+			},
+			exts: extensionConfig{
+				Normed:   ".md",
+				Real:     ".qmd",
+				RealPath: "tutorials/intro.qmd",
+			},
+			expected: "A test $g_i = p_i$ here.",
+		},
+		{
+			description: "token ignore in a path-scoped section that doesn't match",
+			content:     "A test $g_i = p_i$ here.",
+			conf: core.Config{
+				TokenIgnores: map[string][]string{
+					"tutorials/*.md": {`(\$+[^\n$]+\$+)`},
+				},
+			},
+			exts: extensionConfig{
+				Normed:   ".md",
+				Real:     ".md",
+				RealPath: "guides/intro.md",
+			},
+			expected: "A test $g_i = p_i$ here.",
+		},
+		{
+			description: "block ignore in a path-scoped section",
+			content:     "Intro.\n\nBEGIN\nskipped\nEND\n",
+			conf: core.Config{
+				BlockIgnores: map[string][]string{
+					"docs/**/*.md": {`(?s)(BEGIN.*?END)`},
+				},
+			},
+			exts: extensionConfig{
+				Normed:   ".md",
+				Real:     ".md",
+				RealPath: "docs/src/a.md",
+			},
+			expected: "Intro.\n\n\n```\nBEGIN\nskipped\nEND\n```\n\n",
 		},
 	}
 
@@ -115,7 +178,7 @@ func Test_applyPatterns_errors(t *testing.T) {
 					".md": {"{/*", ""},
 				},
 			},
-			exts: extensionConfig{".md", ".md"},
+			exts: extensionConfig{Normed: ".md", Real: ".md"},
 			content: `
 This is the intro pagragraph.
 

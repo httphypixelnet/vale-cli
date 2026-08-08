@@ -162,6 +162,16 @@ func insideInlineMarkup(ctx string, fs []int) bool {
 		return true
 	}
 
+	// `$…$` inline math is skipped the same way inline code is, so a match
+	// pressed against a delimiter is markup rather than the prose that fired.
+	// Without this, a word inside an equation wins over the same word later in
+	// the line and the alert lands in the math. See #839.
+	if fs[0] > 0 && ctx[fs[0]-1] == '$' {
+		return true
+	} else if fs[1] < len(ctx) && ctx[fs[1]] == '$' {
+		return true
+	}
+
 	return false
 }
 

@@ -98,8 +98,9 @@ func NewLinter(cfg *core.Config) (*Linter, error) {
 // replacements.
 func (l *Linter) Transform(f *core.File) (string, error) {
 	exts := extensionConfig{
-		Normed: f.NormedExt,
-		Real:   f.RealExt,
+		Normed:   f.NormedExt,
+		Real:     f.RealExt,
+		RealPath: f.Path,
 	}
 
 	return applyPatterns(l.Manager.Config, exts, f.Content)

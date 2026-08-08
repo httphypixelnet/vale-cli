@@ -48,6 +48,11 @@ func TestInsideInlineMarkup(t *testing.T) {
 			[]int{18, 21}, false},
 		{"hyphenated compound is not markup", "a well-known fix",
 			[]int{2, 6}, false},
+		{"opening math delimiter beside match", "x $ZQX$ y", []int{3, 6}, true},
+		{"closing math delimiter against match", "x $f(ZQX)$ and ZQX y",
+			[]int{5, 8}, false},
+		{"prose occurrence after math", "x $ZQX$ and ZQX y",
+			[]int{12, 15}, false},
 	}
 
 	for _, c := range cases {
