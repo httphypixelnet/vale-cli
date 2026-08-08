@@ -108,6 +108,9 @@ func (l *Linter) lintFragments(f *core.File) error {
 		}
 
 		f.SetMetaScope(comment.Scope)
+		if l.skipsComment(comment.Scope) {
+			continue
+		}
 		f.SetText(comment.Text)
 
 		switch f.NormedExt {

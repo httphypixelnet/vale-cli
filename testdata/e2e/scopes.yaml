@@ -265,3 +265,62 @@ cases:
       test.rst:9:3:rules.List:'TODO' left in text
       test.rst:10:3:rules.List:'TODO' left in text
       test.rst:14:4:rules.List:'XXX' left in text
+
+  - name: ignored-comment-scope
+    about: "#858 -- `IgnoredScopes` excludes a comment scope when the file is
+      read as source."
+    files:
+      .vale.ini: |
+        MinAlertLevel = suggestion
+        IgnoredScopes = text.comment.block
+
+        [*.py]
+        BasedOnStyles = Vale
+        Vale.Terms = NO
+      example.py: |
+        # The folowing function computes an area.
+
+        def area(radius: float) -> float:
+            """Compute the area of a circle.
+
+            Takes the raduis and returns the area.
+            """
+            return 3.14 * radius ** 2
+    args: example.py
+    exit: 1
+    want: |
+      example.py:1:7:Vale.Spelling:Did you really mean 'folowing'?
+    absent:
+      - raduis
+
+  - name: ignored-comment-scope-mapped
+    about: "#858 -- and when a markup format is mapped onto it. Mapping one
+      switches which reader runs; it must not cost the ability to leave a
+      docstring alone, which `BlockIgnores` cannot do in its place -- by the
+      time those patterns run, the delimiters they match are gone."
+    files:
+      .vale.ini: |
+        MinAlertLevel = suggestion
+        IgnoredScopes = text.comment.block
+
+        [formats]
+        py = md
+
+        [*.py]
+        BasedOnStyles = Vale
+        Vale.Terms = NO
+      example.py: |
+        # The folowing function computes an area.
+
+        def area(radius: float) -> float:
+            """Compute the area of a circle.
+
+            Takes the raduis and returns the area.
+            """
+            return 3.14 * radius ** 2
+    args: example.py
+    exit: 1
+    want: |
+      example.py:1:7:Vale.Spelling:Did you really mean 'folowing'?
+    absent:
+      - raduis

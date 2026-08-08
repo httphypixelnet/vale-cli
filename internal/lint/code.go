@@ -28,13 +28,24 @@ func updateQueries(f *core.File, views map[string]*core.View) ([]core.Scope, err
 	return found, nil
 }
 
+// skipsComment reports whether `IgnoredScopes` excludes a comment of this
+// scope -- `text.comment.block` for a Python docstring, say.
+//
+// Both paths that read comments consult this. Which one runs depends on
+// whether a markup format is mapped onto the file, and asking for Markdown in
+// your comments must not also cost you the ability to exclude one. See #858.
+func (l *Linter) skipsComment(scope string) bool {
+	ignored := l.Manager.Config.IgnoredScopes
+	return core.StringInSlice("comment", ignored) ||
+		core.StringInSlice(scope, ignored)
+}
+
 func (l *Linter) lintCode(f *core.File) error {
 	lang, err := code.GetLanguageFromExt(f.RealExt)
 	if err != nil {
 		// No tree-sitter grammar available for this file type.
 		return l.lintCodeOld(f)
 	}
-	ignored := l.Manager.Config.IgnoredScopes
 
 	found, err := updateQueries(f, l.Manager.Config.Views)
 	if err != nil {
@@ -52,9 +63,7 @@ func (l *Linter) lintCode(f *core.File) error {
 	last := 0
 	for _, comment := range comments {
 		f.SetMetaScope(comment.Scope)
-		if core.StringInSlice("comment", ignored) {
-			continue
-		} else if core.StringInSlice(comment.Scope, ignored) {
+		if l.skipsComment(comment.Scope) {
 			continue
 		}
 		f.SetText(comment.Text)
