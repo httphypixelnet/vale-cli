@@ -114,6 +114,65 @@ func TestQdocHTML(t *testing.T) {
 			[]string{"The  rest of the sentence."},
 			[]string{"unknowncmd"},
 		},
+		{
+			"a command may share the opening delimiter's line",
+			"/*! \\page overview.html\n    \\title The Page Title\n*/\n",
+			[]string{"<h1>The Page Title</h1>"},
+			[]string{"/*!", "*/", "overview"},
+		},
+		{
+			"prose may share the opening delimiter's line",
+			"/*! One brief sentence. */\n",
+			[]string{"One brief sentence."},
+			[]string{"/*!", "*/"},
+		},
+		{
+			"adjacent comment blocks are separate paragraphs",
+			"/*!\n    First block.\n*/\n\n/*!\n    Second block.\n*/\n",
+			[]string{"<p>    First block.</p>", "<p>    Second block.</p>"},
+			nil,
+		},
+		{
+			"build-system and type commands are markup",
+			"\\qmlenum Mode\n\\qmlsingletontype Theme\n\\typealias Alias\n" +
+				"\\nativetype QString\n\\cmakepackage Qt6\n\\cmakecomponent Widgets\n" +
+				"\\cmaketargetitem Target\n\\qtcmakepackage Core\n" +
+				"\\qtcmaketargetitem Item\n\\qtvariable widgets\n" +
+				"\\tableofcontents auto\n\\dontdocument (Hidden)\n\nProse here.\n",
+			[]string{"<p>Prose here.</p>"},
+			[]string{"Mode", "Theme", "Alias", "QString", "Qt6", "Widgets",
+				"Target", "Core", "Item", "widgets", "auto", "Hidden"},
+		},
+		{
+			"a comparison block's command lines are markup",
+			"\\compareswith equality QAnyStringView\n\\endcompareswith\n\nProse here.\n",
+			[]string{"<p>Prose here.</p>"},
+			[]string{"QAnyStringView"},
+		},
+		{
+			"a conditional's expression is markup, its branches prose",
+			"\\if defined(onlinedocs)\nOnline prose.\n\\else\nOffline prose.\n\\endif\n",
+			[]string{"Online prose.", "Offline prose."},
+			[]string{"onlinedocs"},
+		},
+		{
+			"an escaped backslash is text, not a command",
+			"Write \\\\c to show the command.\n",
+			[]string{`Write \c to show the command.`},
+			[]string{"<code>"},
+		},
+		{
+			"a unicode code point is markup",
+			"A bullet \\unicode 0x2022 sits here.\n",
+			[]string{"A bullet", "sits here."},
+			[]string{"0x2022"},
+		},
+		{
+			"a span's attribute is markup, its text prose",
+			"See \\span {class=\"vrheader\"} {the spanned words} here.\n",
+			[]string{"<span>the spanned words</span>", "here."},
+			[]string{"vrheader", "class="},
+		},
 	}
 
 	for _, c := range cases {

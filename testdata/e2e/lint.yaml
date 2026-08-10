@@ -348,7 +348,9 @@ cases:
   - name: qdoc
     about: "#784 -- QDoc's commands are markup: topic lines, code blocks,
       links' targets, and options say nothing, while titles, sections,
-      briefs, notes, items, cells, and captions are prose"
+      briefs, notes, items, cells, and captions are prose. A command may
+      share the opening `/*!` line, and a conditional block's prose still
+      counts"
     args: test.qdoc
     exit: 0
     want: |
@@ -364,14 +366,18 @@ cases:
       test.qdoc:33:36:vale.Annotations:'TODO' left in text
       test.qdoc:36:46:vale.Annotations:'XXX' left in text
       test.qdoc:38:47:vale.Annotations:'TODO' left in text
+      test.qdoc:48:34:vale.Annotations:'TODO' left in text
+      test.qdoc:67:37:vale.Annotations:'XXX' left in text
+      test.qdoc:69:27:vale.Annotations:'TODO' left in text
+      test.qdoc:73:61:vale.Annotations:'XXX' left in text
     absent:
       - FIXME
       - NOTE
 
   - name: qdoc-fragments
     about: doc comments in C++ sources lint as QDoc through `[formats]`, with
-      alerts mapped back to the source; block comments are documentation,
-      line comments are code
+      alerts mapped back to the source; only `/*!` is documentation, while
+      line comments and plain block comments are code
     files:
       .vale.ini: |
         StylesPath = styles
@@ -404,15 +410,18 @@ cases:
         // A ZQX in a line comment is code, not documentation.
 
         /*
-            A plain block comment still has its ZQX linted.
+            A plain block comment with a ZQX is code too.
         */
+
+        /****************************************************
+        ** A ZQX in a license header is not documentation.
+        ****************************************************/
         void Widget::other() {}
     args: widget.cpp
     exit: 1
     want: |
       widget.cpp:6:23:T.Tok:'ZQX' in a doc comment
       widget.cpp:8:26:T.Tok:'ZQX' in a doc comment
-      widget.cpp:15:41:T.Tok:'ZQX' in a doc comment
 
   - name: qml-fragments
     about: doc comments in QML sources lint as QDoc through `[formats]`;
@@ -471,7 +480,7 @@ cases:
             //! [0]
 
             /*
-                A ZQX in a plain block comment still lints.
+                A ZQX in a plain block comment is code as well.
             */
             function formatValue(v) {
                 var label = "a ZQX in a string is code";
@@ -491,7 +500,6 @@ cases:
       Slider.qml:10:17:T.Tok:'ZQX' in a doc comment
       Slider.qml:16:13:T.Note:'ZQX' in a note
       Slider.qml:16:13:T.Tok:'ZQX' in a doc comment
-      Slider.qml:27:11:T.Tok:'ZQX' in a doc comment
       Slider.qml:36:29:T.Tok:'ZQX' in a doc comment
 
   - name: quarto

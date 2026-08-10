@@ -27,14 +27,23 @@ var qdocVerbatim = map[string]struct{}{
 	"raw":     {},
 }
 
-// qdocSkipLine names the topic, context, and quoting commands whose whole
-// line is markup: identifiers, file paths, and cross-references, not prose.
+// qdocSkipLine names the topic, context, quoting, build-system, and
+// conditional commands whose whole line is markup: identifiers, file paths,
+// cross-references, and expressions, not prose.
 var qdocSkipLine = map[string]struct{}{
 	"annotatedlist":       {},
 	"class":               {},
+	"cmakecomponent":      {},
+	"cmakepackage":        {},
+	"cmaketargetitem":     {},
 	"codeline":            {},
+	"compareswith":        {},
 	"contentspage":        {},
+	"dontdocument":        {},
 	"dots":                {},
+	"else":                {},
+	"endcompareswith":     {},
+	"endif":               {},
 	"enum":                {},
 	"example":             {},
 	"externalpage":        {},
@@ -42,6 +51,7 @@ var qdocSkipLine = map[string]struct{}{
 	"generatelist":        {},
 	"group":               {},
 	"headerfile":          {},
+	"if":                  {},
 	"include":             {},
 	"indexpage":           {},
 	"ingroup":             {},
@@ -55,6 +65,7 @@ var qdocSkipLine = map[string]struct{}{
 	"meta":                {},
 	"module":              {},
 	"namespace":           {},
+	"nativetype":          {},
 	"nextpage":            {},
 	"noautolist":          {},
 	"nonreentrant":        {},
@@ -69,12 +80,17 @@ var qdocSkipLine = map[string]struct{}{
 	"qmlattachedsignal":   {},
 	"qmlbasictype":        {},
 	"qmlclass":            {},
+	"qmlenum":             {},
 	"qmlmethod":           {},
 	"qmlmodule":           {},
 	"qmlproperty":         {},
 	"qmlsignal":           {},
+	"qmlsingletontype":    {},
 	"qmltype":             {},
 	"qmlvaluetype":        {},
+	"qtcmakepackage":      {},
+	"qtcmaketargetitem":   {},
+	"qtvariable":          {},
 	"quotefile":           {},
 	"quotefromfile":       {},
 	"reentrant":           {},
@@ -88,8 +104,10 @@ var qdocSkipLine = map[string]struct{}{
 	"skipuntil":           {},
 	"snippet":             {},
 	"startpage":           {},
+	"tableofcontents":     {},
 	"target":              {},
 	"threadsafe":          {},
+	"typealias":           {},
 	"typedef":             {},
 	"variable":            {},
 	"wrapper":             {},
@@ -109,9 +127,11 @@ var (
 	qdocBlockCmd = regexp.MustCompile(`^\s*\\([a-zA-Z0-9]+)\s*(.*)$`)
 	// An inline command and its argument: `\c word` or `\c {some words}`,
 	// with an optional [qualifier] for `\l`. A braced argument may wrap
-	// within its paragraph.
-	qdocInlineCmd = regexp.MustCompile(`\\([a-zA-Z0-9]+)\s*(\[[^\]\n]*\]\s*)?(\{[^{}]*\}|[^\s{][^\s]*)?`)
-	// The braced {text} that may follow a braced `\l` target.
+	// within its paragraph. `\\` is an escaped backslash, matched first so
+	// that the command that follows one is read as text.
+	qdocInlineCmd = regexp.MustCompile(`\\\\|\\([a-zA-Z0-9]+)\s*(\[[^\]\n]*\]\s*)?(\{[^{}]*\}|[^\s{][^\s]*)?`)
+	// The braced {text} that may follow a braced `\l` target or `\span`
+	// attribute.
 	qdocLinkText = regexp.MustCompile(`^\s*\{[^{}]*\}`)
 )
 
@@ -144,6 +164,13 @@ func qdocInline(text string) string {
 		}
 		out.WriteString(text[:loc[0]])
 
+		if loc[2] < 0 {
+			// `\\` is a literal backslash, not a command.
+			out.WriteString(`\`)
+			text = text[loc[1]:]
+			continue
+		}
+
 		name := text[loc[2]:loc[3]]
 		arg := ""
 		if loc[6] >= 0 {
@@ -171,9 +198,20 @@ func qdocInline(text string) string {
 				}
 			}
 			out.WriteString(`<a href="#">` + label + "</a>")
+		case "span":
+			// `\span {class="x"} {text}`: the attribute is markup, the
+			// braced text that follows is prose.
+			label := ""
+			if m := qdocLinkText.FindString(rest); m != "" {
+				label = qdocArg(strings.TrimSpace(m))
+				rest = rest[len(m):]
+			}
+			out.WriteString("<span>" + label + "</span>")
 		case "image", "inlineimage":
 			// The argument is a file name; a caption, if any, follows as
 			// ordinary prose.
+		case "unicode":
+			// The argument is a code point, not prose.
 		default:
 			// An unknown command is markup; whatever followed it is prose.
 			rest = text[loc[3]:]
@@ -270,13 +308,23 @@ func (c *qdocConv) endItem() {
 	top.inItem = false
 }
 
-func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command family
-	trimmed := strings.TrimSpace(raw)
-
-	// Comment delimiters, in both standalone .qdoc files and sources.
-	if trimmed == "/*!" || trimmed == "*/" || strings.HasPrefix(trimmed, "/*!") && strings.HasSuffix(trimmed, "*/") {
-		return
+// qdocBlankDelims blanks the comment delimiters of a standalone .qdoc file,
+// which a command or its prose may share a line with: `/*! \page index.html`.
+// They are replaced by spaces rather than removed so that a column in the
+// converted line is still a column in the source.
+func qdocBlankDelims(raw string) string {
+	if i := strings.Index(raw, "/*!"); i >= 0 && strings.TrimSpace(raw[:i]) == "" {
+		raw = raw[:i] + "   " + raw[i+3:]
 	}
+	if i := strings.LastIndex(raw, "*/"); i >= 0 && strings.TrimSpace(raw[i+2:]) == "" {
+		raw = raw[:i] + "  " + raw[i+2:]
+	}
+	return raw
+}
+
+func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command family
+	raw = qdocBlankDelims(raw)
+	trimmed := strings.TrimSpace(raw)
 
 	if c.verbatim != "" {
 		if m := qdocBlockCmd.FindStringSubmatch(raw); m != nil && m[1] == c.verbatim {

@@ -43,3 +43,32 @@
 
     \sa FIXME, QObject
 */
+
+/*! \page conditional.html
+    \title A second title with a TODO in it
+
+    \qmlenum Mode
+    \qmlsingletontype FIXME
+    \typealias FIXME
+    \nativetype FIXME
+    \cmakepackage FIXME
+    \cmakecomponent FIXME
+    \cmaketargetitem FIXME
+    \qtcmakepackage FIXME
+    \qtcmaketargetitem FIXME
+    \qtvariable FIXME
+    \tableofcontents FIXME
+    \dontdocument (FIXME)
+
+    \compareswith equality FIXME
+    \endcompareswith
+
+    \if defined(FIXME)
+    A conditional paragraph with an XXX in it.
+    \else
+    Another branch with a TODO in it.
+    \endif
+
+    A literal backslash \\c is not a command, and \unicode 0x2022 is a
+    character. \span {class="FIXME"} {Spanned prose with an XXX in it.}
+*/
