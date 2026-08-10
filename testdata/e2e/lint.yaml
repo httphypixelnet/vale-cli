@@ -380,9 +380,106 @@ cases:
       test.qdoc:108:70:vale.Annotations:'TODO' left in text
       test.qdoc:113:45:vale.Annotations:'TODO' left in text
       test.qdoc:116:51:vale.Annotations:'XXX' left in text
+      test.qdoc:120:45:vale.Annotations:'TODO' left in text
+      test.qdoc:122:42:vale.Annotations:'XXX' left in text
     absent:
       - FIXME
       - NOTE
+
+  - name: qdoc-line-accuracy
+    about: an alert keeps its source line through the constructs a real Qt
+      page is built from -- a link split across lines, snippet markers,
+      custom macros, and a snippet reference
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Mark = YES
+      styles/T/Mark.yml: |
+        extends: existence
+        message: "'%s'"
+        level: error
+        nonword: true
+        raw:
+          - MARK[A-E]
+      crosslink.qdoc: |
+        /*!
+            \page qt-edu-for-designers.html
+            \title Qt Edu for Designers
+
+        //! [intro]
+            \e {Qt Edu for Designers} package contains \l {Qt Design Studio Manual}
+            {Qt Design Studio Enterprise}, allowing you to MARKA import.
+        //! [intro]
+
+            These instructions walk you through the installation.
+
+            \include qt-edu-steps.qdocinc {qt-edu-common-steps} {Qt Design Studio}
+
+            \image qt-edu-install-design-studio.png
+
+            With \e {Qt Edu for Designers} license, you get access to Qt Design
+            Studio. Select the \uicontrol {Design Tools} shortcut to install.
+
+            Select \uicontrol {Next}.
+
+            \include qt-edu-steps.qdocinc qt-edu-license-agreement
+
+            \section1 9. Finish the installation
+
+            Select \uicontrol {Install} to start the installation process.
+
+            Once installation is complete, you'll see the screen.
+
+            \image qt-edu-install-finish-design-studio.png
+
+            Select \uicontrol {Finish} to exit the installer.
+
+            \section1 10. Open Qt Design Studio
+
+            Go to the MARKB folder to see the tools that were installed.
+            Qt Design Studio is MARKC located under its own folder.
+        */
+      macros.qdoc: |
+        /*!
+            \class Example
+            \brief A brief description.
+
+            This works on \macos and \linux MARKA platforms.
+            The \QUL framework handles MARKB rendering accordingly.
+            Final sentence after MARKC macros.
+        */
+      markers.qdoc: |
+        /*!
+        //! [intro]
+            Prose line MARKA three.
+        //! [intro]
+
+            Prose line MARKB six.
+        */
+      snippet.qdoc: |
+        /*!
+            \class Loader
+            \brief Loads resources.
+
+            Use the loader as follows:
+            \snippet examples/loader.cpp setup
+            Prose after MARKA snippet should be included.
+        */
+    args: .
+    exit: 1
+    want: |
+      crosslink.qdoc:7:52:T.Mark:'MARKA'
+      crosslink.qdoc:35:15:T.Mark:'MARKB'
+      crosslink.qdoc:36:25:T.Mark:'MARKC'
+      macros.qdoc:5:37:T.Mark:'MARKA'
+      macros.qdoc:6:32:T.Mark:'MARKB'
+      macros.qdoc:7:26:T.Mark:'MARKC'
+      markers.qdoc:3:16:T.Mark:'MARKA'
+      markers.qdoc:6:16:T.Mark:'MARKB'
+      snippet.qdoc:7:17:T.Mark:'MARKA'
 
   - name: qdoc-classes
     about: "`.qdocinc` is QDoc without configuration, and `\\div` and `\\span`

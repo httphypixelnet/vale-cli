@@ -117,6 +117,12 @@ func TestQdocHTML(t *testing.T) {
 			[]string{"intro", "//!"},
 		},
 		{
+			"prose about markup stays prose",
+			"The file must be included using a <script> tag.\n\nProse after it.\n",
+			[]string{"using a &lt;script&gt; tag.", "<p>Prose after it.</p>"},
+			nil,
+		},
+		{
 			"sa lines are markup",
 			"Prose here.\n\n\\sa QWidget, QObject\n",
 			[]string{"<p>Prose here.</p>"},
@@ -251,7 +257,7 @@ func TestQdocHTML(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			html := qdocToHTML(c.in)
+			html := qdocFragmentToHTML(c.in)
 
 			for _, want := range c.want {
 				if !strings.Contains(html, want) {
@@ -283,7 +289,7 @@ func TestQdocVerbatimClose(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			html := qdocToHTML(c.in)
+			html := qdocFragmentToHTML(c.in)
 			if !strings.Contains(html, "<p>Prose here.</p>") {
 				t.Errorf("prose did not survive the block:\n%s", html)
 			}
@@ -291,5 +297,38 @@ func TestQdocVerbatimClose(t *testing.T) {
 				t.Errorf("code leaked into prose:\n%s", html)
 			}
 		})
+	}
+}
+
+// TestQdocWholeFile pins that a `.qdoc` file is a file of `/*! ... */`
+// comments: a licence header, a `//! [name]` snippet body, and anything else
+// between them is code, however much it reads like prose.
+func TestQdocWholeFile(t *testing.T) {
+	const src = `// Copyright (C) 2016 The Qt Company Ltd.
+// SPDX-License-Identifier: LicenseRef-Qt-Commercial
+
+//! [15]
+md build_shared
+cd build_shared
+//! [15]
+
+/*!
+    \title A Real Heading
+    Real prose here.
+*/
+
+Trailing text outside any comment.
+`
+
+	html := qdocToHTML(src)
+	for _, want := range []string{"<h1>A Real Heading</h1>", "Real prose here."} {
+		if !strings.Contains(html, want) {
+			t.Errorf("missing %q in:\n%s", want, html)
+		}
+	}
+	for _, absent := range []string{"Copyright", "SPDX", "build_shared", "Trailing"} {
+		if strings.Contains(html, absent) {
+			t.Errorf("content outside a comment was kept (%q):\n%s", absent, html)
+		}
 	}
 }

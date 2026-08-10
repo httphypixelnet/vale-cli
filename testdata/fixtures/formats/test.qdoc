@@ -115,3 +115,9 @@
 
     \image screenshot-FIXME.png A caption with an XXX in it.
 */
+
+/*!
+    Include it with a <script> tag, and the TODO after it still counts.
+
+    Prose in a later paragraph keeps its XXX.
+*/

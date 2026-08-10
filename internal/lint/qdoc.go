@@ -180,7 +180,7 @@ func (c *qdocConv) meta(kind, value string) {
 	if value == "" {
 		return
 	}
-	c.html.WriteString(`<data class="` + kind + `">` + value + "</data>\n")
+	c.html.WriteString(`<data class="` + kind + `">` + qdocEsc(value) + "</data>\n")
 }
 
 // qdocOpenDiv writes a `<div>` carrying `arg`'s class, if it names one.
@@ -200,6 +200,17 @@ var qdocInlineNames = map[string]struct{}{
 	"sub": {}, "sup": {}, "tt": {}, "uicontrol": {}, "underline": {},
 }
 
+// qdocEsc makes text safe to write into the HTML the walker reads.
+//
+// QDoc prose is kept word-for-word, and Qt's prose talks about markup: a
+// sentence explaining that a file "must be included using a <script> tag"
+// carries a real tag. Written straight through, it opens an element in the
+// converted document -- and `<script>` in particular puts the tokenizer into
+// raw-text mode, so the rest of the page is swallowed looking for a close
+// that never comes. The tokenizer decodes these again, so the text a rule
+// sees, and the text located in the source, are unchanged.
+var qdocEsc = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace
+
 // qdocArg strips the braces from a command argument.
 func qdocArg(arg string) string {
 	if strings.HasPrefix(arg, "{") && strings.HasSuffix(arg, "}") {
@@ -217,10 +228,10 @@ func qdocInline(text string) string {
 	for {
 		loc := qdocInlineCmd.FindStringSubmatchIndex(text)
 		if loc == nil {
-			out.WriteString(text)
+			out.WriteString(qdocEsc(text))
 			break
 		}
-		out.WriteString(text[:loc[0]])
+		out.WriteString(qdocEsc(text[:loc[0]]))
 
 		if loc[2] < 0 {
 			// `\\` is a literal backslash, not a command.
@@ -238,15 +249,15 @@ func qdocInline(text string) string {
 
 		switch name {
 		case "c", "tt", "a":
-			out.WriteString("<code>" + qdocArg(arg) + "</code>")
+			out.WriteString("<code>" + qdocEsc(qdocArg(arg)) + "</code>")
 		case "b", "bold", "uicontrol":
-			out.WriteString("<strong>" + qdocArg(arg) + "</strong>")
+			out.WriteString("<strong>" + qdocEsc(qdocArg(arg)) + "</strong>")
 		case "e", "i":
-			out.WriteString("<em>" + qdocArg(arg) + "</em>")
+			out.WriteString("<em>" + qdocEsc(qdocArg(arg)) + "</em>")
 		case "underline":
-			out.WriteString("<u>" + qdocArg(arg) + "</u>")
+			out.WriteString("<u>" + qdocEsc(qdocArg(arg)) + "</u>")
 		case "sub", "sup":
-			out.WriteString("<" + name + ">" + qdocArg(arg) + "</" + name + ">")
+			out.WriteString("<" + name + ">" + qdocEsc(qdocArg(arg)) + "</" + name + ">")
 		case "l":
 			label := qdocArg(arg)
 			if strings.HasPrefix(arg, "{") {
@@ -255,7 +266,7 @@ func qdocInline(text string) string {
 					rest = rest[len(m):]
 				}
 			}
-			out.WriteString(`<a href="#">` + label + "</a>")
+			out.WriteString(`<a href="#">` + qdocEsc(label) + "</a>")
 		case "span":
 			// `\span {class="x"} {text}`: the attribute names a class a rule
 			// can be scoped to, the braced text that follows is prose.
@@ -265,9 +276,9 @@ func qdocInline(text string) string {
 				rest = rest[len(m):]
 			}
 			if class := qdocClass(arg); class != "" {
-				out.WriteString(`<span class="` + class + `">` + label + "</span>")
+				out.WriteString(`<span class="` + class + `">` + qdocEsc(label) + "</span>")
 			} else {
-				out.WriteString("<span>" + label + "</span>")
+				out.WriteString("<span>" + qdocEsc(label) + "</span>")
 			}
 		case "image", "inlineimage":
 			// The argument is a file name; a caption, if any, follows as
@@ -301,6 +312,11 @@ type qdocConv struct {
 	stack    []qdocContext
 	verbatim string // the \end command that closes the open verbatim block
 	omitted  bool
+
+	// inComment says whether the reader is inside a `/*! ... */` block, the
+	// only place QDoc looks. A comment body extracted from a source file
+	// starts inside one; a whole file starts outside.
+	inComment bool
 }
 
 func (c *qdocConv) flush() {
@@ -394,12 +410,27 @@ func (c *qdocConv) endsVerbatim(name string) bool {
 	return name == qdocVerbatim[c.verbatim] || name == "end"+c.verbatim
 }
 
-func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command family
+// opensComment reports whether the line starts a `/*!` documentation comment.
+func qdocOpensComment(raw string) bool {
+	i := strings.Index(raw, "/*!")
+	return i >= 0 && strings.TrimSpace(raw[:i]) == ""
+}
+
+// line reads one line of a QDoc source, tracking which of them the reader is
+// meant to see at all.
+//
+// QDoc documents a project from its `/*! ... */` comments and nothing else.
+// A `.qdoc` file is a file of those comments, and what sits between them --
+// a licence header, a `//! [name]` snippet whose body is shell or C++ -- is
+// no more prose than the code in a `.cpp` file is.
+func (c *qdocConv) line(raw string) {
+	closes := strings.HasSuffix(strings.TrimSpace(raw), "*/")
+
 	// A verbatim or omitted block cannot outlive the comment holding it. An
 	// unterminated one -- a `\code` whose `\endcode` was never written, or a
 	// spelling this converter does not know -- would otherwise swallow the
 	// rest of the file.
-	if strings.HasSuffix(strings.TrimSpace(raw), "*/") {
+	if closes {
 		if c.verbatim != "" {
 			c.html.WriteString("</code></pre>\n")
 			c.verbatim = ""
@@ -407,7 +438,18 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 		c.omitted = false
 	}
 
-	raw = qdocBlankDelims(raw)
+	if c.inComment || qdocOpensComment(raw) {
+		c.inComment = true
+		c.content(qdocBlankDelims(raw))
+	}
+
+	if closes {
+		c.inComment = false
+		c.closeDiv()
+	}
+}
+
+func (c *qdocConv) content(raw string) { //nolint:gocyclo // one case per command family
 	trimmed := strings.TrimSpace(raw)
 
 	if c.verbatim != "" {
@@ -516,7 +558,7 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 		c.flush()
 		fields := strings.Fields(rest)
 		if len(fields) > 1 {
-			c.html.WriteString("<p><code>" + fields[0] + "</code> " +
+			c.html.WriteString("<p><code>" + qdocEsc(fields[0]) + "</code> " +
 				qdocInline(strings.Join(fields[1:], " ")) + "</p>\n")
 		}
 	case name == "quotation":
@@ -570,8 +612,16 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 	}
 }
 
-func qdocToHTML(content string) string {
-	conv := &qdocConv{}
+// qdocToHTML converts a whole QDoc source: the `/*! ... */` comments in it
+// are the document, and everything else is code.
+func qdocToHTML(content string) string { return qdocConvert(content, false) }
+
+// qdocFragmentToHTML converts the body of a single comment, already extracted
+// from a source file, so there is no `/*!` left to wait for.
+func qdocFragmentToHTML(content string) string { return qdocConvert(content, true) }
+
+func qdocConvert(content string, inComment bool) string {
+	conv := &qdocConv{inComment: inComment}
 	for _, line := range strings.Split(content, "\n") {
 		conv.line(line)
 	}
@@ -580,8 +630,17 @@ func qdocToHTML(content string) string {
 	return conv.html.String()
 }
 
-// lintQDoc lints QDoc: Qt's documentation markup.
+// lintQDoc lints a QDoc source: Qt's documentation markup.
 func (l *Linter) lintQDoc(f *core.File) error {
+	return l.lintQDocWith(f, qdocToHTML)
+}
+
+// lintQDocFragment lints one QDoc comment lifted out of a code file.
+func (l *Linter) lintQDocFragment(f *core.File) error {
+	return l.lintQDocWith(f, qdocFragmentToHTML)
+}
+
+func (l *Linter) lintQDocWith(f *core.File, convert func(string) string) error {
 	err := l.lintMetadata(f)
 	if err != nil {
 		return err
@@ -592,5 +651,5 @@ func (l *Linter) lintQDoc(f *core.File) error {
 		return err
 	}
 
-	return l.lintHTMLTokens(f, []byte(qdocToHTML(s)), 0)
+	return l.lintHTMLTokens(f, []byte(convert(s)), 0)
 }
