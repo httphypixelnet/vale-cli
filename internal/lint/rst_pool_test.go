@@ -146,3 +146,27 @@ func pythonProcessCount(t *testing.T) int {
 	}
 	return strings.Count(string(out), "python")
 }
+
+// A run that lints a string owns its helper processes the same way a run that
+// lints a file does. `cat page.rst | vale` and `vale "some text"` both reach
+// Docutils through LintString, and both must leave nothing running behind
+// them: an editor integration invokes Vale on every save.
+func TestLintStringStopsHelpers(t *testing.T) {
+	if rstExecutable() == "" {
+		t.Skip("rst2html not installed")
+	}
+
+	linter, err := initLinter()
+	if err != nil {
+		t.Skip(err)
+	}
+	linter.Manager.Config.Flags.InExt = ".rst"
+
+	if _, err = linter.LintString("A Title\n=======\n\nSome prose here.\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	if linter.rst != nil {
+		t.Error("the Docutils pool outlived the run that started it")
+	}
+}

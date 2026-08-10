@@ -118,6 +118,13 @@ func (l *Linter) poolSize() int {
 func (l *Linter) LintString(src string) ([]*core.File, error) {
 	l.singleDoc = true
 
+	// A string is linted by the same helpers a file is -- `cat page.rst |
+	// vale` reaches Docutils exactly as `vale page.rst` does -- so it owes
+	// them the same shutdown. Without this the run left its processes to be
+	// noticed by the closing of a pipe rather than being waited for, which is
+	// the one way this path differed from Lint.
+	defer l.stopExternal()
+
 	linted := l.lintFile(src)
 	return []*core.File{linted.file}, linted.err
 }
