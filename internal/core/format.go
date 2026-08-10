@@ -48,7 +48,7 @@ var FormatByExtension = map[string][]string{
 	`\.(?:md|mdown|markdown|markdn|[Rr]md)$`: {".md", "markup"},
 	`\.(?:mdx)$`:                             {".mdx", "markup"},
 	`\.(?:myst)$`:                            {".myst", "markup"},
-	`\.(?:qdoc)$`:                            {".qdoc", "markup"},
+	`\.(?:qdoc|qdocinc)$`:                    {".qdoc", "markup"},
 	`\.(?:qmd)$`:                             {".qmd", "markup"},
 	`\.(?:qml)$`:                             {".qml", "code"},
 	`\.(?:org)$`:                             {".org", "markup"},

@@ -18,27 +18,36 @@ import (
 
 // qdocVerbatim names the commands whose content runs to a matching `\end<X>`
 // and is not prose.
-var qdocVerbatim = map[string]struct{}{
-	"badcode": {},
-	"code":    {},
-	"css":     {},
-	"js":      {},
-	"qml":     {},
-	"raw":     {},
+// The command each one ends at is not always `\end<X>`: the code variants all
+// close on `\endcode`, and `\oldcode` runs through `\newcode` because both
+// halves are code.
+var qdocVerbatim = map[string]string{
+	"badcode": "endcode",
+	"code":    "endcode",
+	"css":     "endcss",
+	"js":      "endjs",
+	"newcode": "endcode",
+	"oldcode": "endcode",
+	"qml":     "endqml",
+	"raw":     "endraw",
 }
 
 // qdocSkipLine names the topic, context, quoting, build-system, and
 // conditional commands whose whole line is markup: identifiers, file paths,
 // cross-references, and expressions, not prose.
 var qdocSkipLine = map[string]struct{}{
+	"abstract":            {},
 	"annotatedlist":       {},
+	"attribution":         {},
 	"class":               {},
 	"cmakecomponent":      {},
 	"cmakepackage":        {},
 	"cmaketargetitem":     {},
 	"codeline":            {},
+	"compares":            {},
 	"compareswith":        {},
 	"contentspage":        {},
+	"default":             {},
 	"dontdocument":        {},
 	"dots":                {},
 	"else":                {},
@@ -54,6 +63,7 @@ var qdocSkipLine = map[string]struct{}{
 	"if":                  {},
 	"include":             {},
 	"indexpage":           {},
+	"inheaderfile":        {},
 	"ingroup":             {},
 	"inherits":            {},
 	"inmodule":            {},
@@ -64,23 +74,30 @@ var qdocSkipLine = map[string]struct{}{
 	"macro":               {},
 	"meta":                {},
 	"module":              {},
+	"modulestate":         {},
 	"namespace":           {},
 	"nativetype":          {},
 	"nextpage":            {},
 	"noautolist":          {},
 	"nonreentrant":        {},
+	"notranslate":         {},
+	"omitvalue":           {},
 	"overload":            {},
 	"page":                {},
+	"preliminary":         {},
 	"previouspage":        {},
 	"printline":           {},
 	"printto":             {},
 	"printuntil":          {},
 	"property":            {},
+	"qmlabstract":         {},
 	"qmlattachedproperty": {},
 	"qmlattachedsignal":   {},
 	"qmlbasictype":        {},
 	"qmlclass":            {},
+	"qmldefault":          {},
 	"qmlenum":             {},
+	"qmlenumeratorsfrom":  {},
 	"qmlmethod":           {},
 	"qmlmodule":           {},
 	"qmlproperty":         {},
@@ -93,9 +110,11 @@ var qdocSkipLine = map[string]struct{}{
 	"qtvariable":          {},
 	"quotefile":           {},
 	"quotefromfile":       {},
+	"readonly":            {},
 	"reentrant":           {},
 	"reimp":               {},
 	"relates":             {},
+	"required":            {},
 	"sa":                  {},
 	"since":               {},
 	"sincelist":           {},
@@ -107,6 +126,8 @@ var qdocSkipLine = map[string]struct{}{
 	"tableofcontents":     {},
 	"target":              {},
 	"threadsafe":          {},
+	"toc":                 {},
+	"tocentry":            {},
 	"typealias":           {},
 	"typedef":             {},
 	"variable":            {},
@@ -133,13 +154,42 @@ var (
 	// The braced {text} that may follow a braced `\l` target or `\span`
 	// attribute.
 	qdocLinkText = regexp.MustCompile(`^\s*\{[^{}]*\}`)
+	// A `\div` or `\span` attribute list: `{class="header"}`.
+	qdocClassAttr = regexp.MustCompile(`class\s*=\s*"([^"]*)"`)
+	// A table cell's `{rows,cols}` span, which precedes the cell's prose.
+	qdocCellSpan = regexp.MustCompile(`^\{\d+\s*,\s*\d+\}\s*`)
+	// The `[since]` qualifier that may open a `\deprecated` line.
+	qdocSinceQual = regexp.MustCompile(`^\[[^\]\n]*\]\s*`)
 )
+
+// qdocClass returns the class named by a `\div` or `\span` attribute list, or
+// the argument itself when it is a bare name -- `\div {note}`. An unusable
+// class is dropped rather than guessed at, leaving an unclassed element.
+func qdocClass(arg string) string {
+	arg = qdocArg(arg)
+	if m := qdocClassAttr.FindStringSubmatch(arg); m != nil {
+		return m[1]
+	} else if strings.ContainsAny(arg, `="' `) {
+		return ""
+	}
+	return arg
+}
+
+// qdocOpenDiv writes a `<div>` carrying `arg`'s class, if it names one.
+func (c *qdocConv) openDiv(arg string) {
+	c.flush()
+	if class := qdocClass(arg); class != "" {
+		c.html.WriteString(`<div class="` + class + "\">\n")
+		return
+	}
+	c.html.WriteString("<div>\n")
+}
 
 // qdocInlineNames names the inline commands, so that one starting a line is
 // not mistaken for a block command.
 var qdocInlineNames = map[string]struct{}{
-	"a": {}, "b": {}, "c": {}, "e": {}, "l": {}, "sub": {}, "sup": {},
-	"tt": {}, "uicontrol": {}, "underline": {},
+	"a": {}, "b": {}, "bold": {}, "c": {}, "e": {}, "i": {}, "l": {},
+	"sub": {}, "sup": {}, "tt": {}, "uicontrol": {}, "underline": {},
 }
 
 // qdocArg strips the braces from a command argument.
@@ -181,9 +231,9 @@ func qdocInline(text string) string {
 		switch name {
 		case "c", "tt", "a":
 			out.WriteString("<code>" + qdocArg(arg) + "</code>")
-		case "b", "uicontrol":
+		case "b", "bold", "uicontrol":
 			out.WriteString("<strong>" + qdocArg(arg) + "</strong>")
-		case "e":
+		case "e", "i":
 			out.WriteString("<em>" + qdocArg(arg) + "</em>")
 		case "underline":
 			out.WriteString("<u>" + qdocArg(arg) + "</u>")
@@ -199,14 +249,18 @@ func qdocInline(text string) string {
 			}
 			out.WriteString(`<a href="#">` + label + "</a>")
 		case "span":
-			// `\span {class="x"} {text}`: the attribute is markup, the
-			// braced text that follows is prose.
+			// `\span {class="x"} {text}`: the attribute names a class a rule
+			// can be scoped to, the braced text that follows is prose.
 			label := ""
 			if m := qdocLinkText.FindString(rest); m != "" {
 				label = qdocArg(strings.TrimSpace(m))
 				rest = rest[len(m):]
 			}
-			out.WriteString("<span>" + label + "</span>")
+			if class := qdocClass(arg); class != "" {
+				out.WriteString(`<span class="` + class + `">` + label + "</span>")
+			} else {
+				out.WriteString("<span>" + label + "</span>")
+			}
 		case "image", "inlineimage":
 			// The argument is a file name; a caption, if any, follows as
 			// ordinary prose.
@@ -276,6 +330,9 @@ func (c *qdocConv) item(rest string) {
 	top := &c.stack[n-1]
 	top.inItem = true
 
+	// A table cell may open with a `{rows,cols}` span, which is markup.
+	rest = qdocCellSpan.ReplaceAllString(rest, "")
+
 	tag := "li"
 	if top.kind == "table" {
 		tag = "td"
@@ -322,12 +379,31 @@ func qdocBlankDelims(raw string) string {
 	return raw
 }
 
+// endsVerbatim reports whether name closes the open verbatim block. Both the
+// command QDoc documents and the symmetrical `\end<X>` are accepted, so a
+// source that writes `\endbadcode` is not read as unterminated.
+func (c *qdocConv) endsVerbatim(name string) bool {
+	return name == qdocVerbatim[c.verbatim] || name == "end"+c.verbatim
+}
+
 func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command family
+	// A verbatim or omitted block cannot outlive the comment holding it. An
+	// unterminated one -- a `\code` whose `\endcode` was never written, or a
+	// spelling this converter does not know -- would otherwise swallow the
+	// rest of the file.
+	if strings.HasSuffix(strings.TrimSpace(raw), "*/") {
+		if c.verbatim != "" {
+			c.html.WriteString("</code></pre>\n")
+			c.verbatim = ""
+		}
+		c.omitted = false
+	}
+
 	raw = qdocBlankDelims(raw)
 	trimmed := strings.TrimSpace(raw)
 
 	if c.verbatim != "" {
-		if m := qdocBlockCmd.FindStringSubmatch(raw); m != nil && m[1] == c.verbatim {
+		if m := qdocBlockCmd.FindStringSubmatch(raw); m != nil && c.endsVerbatim(m[1]) {
 			c.verbatim = ""
 			c.html.WriteString("</code></pre>\n")
 		}
@@ -364,7 +440,7 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 		c.omitted = true
 	case func() bool { _, ok := qdocVerbatim[name]; return ok }():
 		c.flush()
-		c.verbatim = "end" + name
+		c.verbatim = name
 		c.html.WriteString("<pre><code>")
 	case func() bool { _, ok := qdocSkipLine[name]; return ok }():
 		c.flush()
@@ -378,6 +454,16 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 	case name == "title":
 		c.flush()
 		c.html.WriteString("<h1>" + qdocInline(rest) + "</h1>\n")
+	case name == "subtitle":
+		c.flush()
+		c.html.WriteString(`<h2 class="subtitle">` + qdocInline(rest) + "</h2>\n")
+	case name == "deprecated":
+		// `\deprecated [6.0] Use \l Foo instead.`: the version is markup,
+		// the replacement advice that may follow it is prose.
+		c.flush()
+		if rest = qdocSinceQual.ReplaceAllString(rest, ""); rest != "" {
+			c.para = append(c.para, rest)
+		}
 	case strings.HasPrefix(name, "section") && len(name) == 8 && name[7] >= '1' && name[7] <= '4':
 		c.closeDiv()
 		level := string('1' + name[7] - '0')
@@ -425,9 +511,15 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 		c.flush()
 		c.html.WriteString("</blockquote>\n")
 	case name == "div":
+		c.openDiv(rest)
+	case name == "details":
+		// `\details {Summary text}`: the summary is prose of its own.
 		c.flush()
-		c.html.WriteString("<div>\n")
-	case name == "enddiv":
+		c.html.WriteString(`<div class="details">` + "\n")
+		if summary := qdocArg(rest); summary != "" {
+			c.html.WriteString(`<p class="summary">` + qdocInline(summary) + "</p>\n")
+		}
+	case name == "enddiv", name == "enddetails":
 		c.flush()
 		c.html.WriteString("</div>\n")
 	case name == "legalese":

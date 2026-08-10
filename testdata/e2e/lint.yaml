@@ -349,8 +349,9 @@ cases:
     about: "#784 -- QDoc's commands are markup: topic lines, code blocks,
       links' targets, and options say nothing, while titles, sections,
       briefs, notes, items, cells, and captions are prose. A command may
-      share the opening `/*!` line, and a conditional block's prose still
-      counts"
+      share the opening `/*!` line; a conditional block's prose, a
+      deprecation's advice, and a summary still count; and modifiers, cell
+      spans, and version qualifiers say nothing"
     args: test.qdoc
     exit: 0
     want: |
@@ -370,9 +371,60 @@ cases:
       test.qdoc:67:37:vale.Annotations:'XXX' left in text
       test.qdoc:69:27:vale.Annotations:'TODO' left in text
       test.qdoc:73:61:vale.Annotations:'XXX' left in text
+      test.qdoc:78:33:vale.Annotations:'TODO' left in text
+      test.qdoc:97:53:vale.Annotations:'XXX' left in text
+      test.qdoc:99:32:vale.Annotations:'TODO' left in text
+      test.qdoc:100:24:vale.Annotations:'XXX' left in text
+      test.qdoc:105:53:vale.Annotations:'TODO' left in text
+      test.qdoc:108:35:vale.Annotations:'XXX' left in text
+      test.qdoc:108:70:vale.Annotations:'TODO' left in text
     absent:
       - FIXME
       - NOTE
+
+  - name: qdoc-classes
+    about: "`.qdocinc` is QDoc without configuration, and `\\div` and `\\span`
+      carry their class into the scope so a rule can target the prose they
+      hold"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Sidebar = YES
+        T.Header = YES
+      styles/T/Sidebar.yml: |
+        extends: existence
+        message: "'%s' in the sidebar"
+        scope: class.sidebar
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      styles/T/Header.yml: |
+        extends: existence
+        message: "'%s' in a header span"
+        scope: class.vrheader
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      api.qdocinc: |
+        /*!
+            \div {class="sidebar"}
+            A ZQX inside the classed div.
+            \enddiv
+
+            A plain paragraph whose ZQX belongs to neither class.
+
+            The \span {class="vrheader"} {ZQX in a span} is scoped too.
+        */
+    args: api.qdocinc
+    exit: 1
+    want: |
+      api.qdocinc:3:7:T.Sidebar:'ZQX' in the sidebar
+      api.qdocinc:8:35:T.Header:'ZQX' in a header span
 
   - name: qdoc-fragments
     about: doc comments in C++ sources lint as QDoc through `[formats]`, with

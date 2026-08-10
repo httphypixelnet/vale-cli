@@ -72,3 +72,38 @@
     A literal backslash \\c is not a command, and \unicode 0x2022 is a
     character. \span {class="FIXME"} {Spanned prose with an XXX in it.}
 */
+
+/*!
+    \page modifiers.html
+    \subtitle A subtitle with a TODO in it
+
+    \abstract
+    \readonly
+    \required
+    \preliminary
+    \qmlabstract
+    \qmldefault
+    \qmlenumeratorsfrom FIXME
+    \omitvalue FIXME
+    \modulestate {FIXME}
+    \notranslate
+    \compares FIXME
+    \default FIXME
+    \inheaderfile FIXME
+    \attribution FIXME
+    \toc
+    \tocentry FIXME
+
+    \deprecated [FIXME] Use the replacement with an XXX in it.
+
+    \details {A summary with a TODO in it.}
+    Body prose with an XXX in it.
+    \enddetails
+
+    \table
+        \row
+            \li {2,1} A spanned cell that keeps its TODO.
+    \endtable
+
+    Use \bold {bold prose with an XXX in it} and \i {emphasis with a TODO}.
+*/

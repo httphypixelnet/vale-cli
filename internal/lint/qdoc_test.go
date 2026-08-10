@@ -168,10 +168,70 @@ func TestQdocHTML(t *testing.T) {
 			[]string{"0x2022"},
 		},
 		{
-			"a span's attribute is markup, its text prose",
+			"a span's class scopes its text, which is prose",
 			"See \\span {class=\"vrheader\"} {the spanned words} here.\n",
-			[]string{"<span>the spanned words</span>", "here."},
-			[]string{"vrheader", "class="},
+			[]string{`<span class="vrheader">the spanned words</span>`, "here."},
+			nil,
+		},
+		{
+			"a div's class scopes the prose it holds",
+			"\\div {class=\"note\"}\nProse inside.\n\\enddiv\n",
+			[]string{`<div class="note">`, "Prose inside.", "</div>"},
+			[]string{"class=\"class"},
+		},
+		{
+			"details keeps its summary as prose",
+			"\\details {A summary sentence.}\nBody prose.\n\\enddetails\n",
+			[]string{`<div class="details">`, `<p class="summary">A summary sentence.</p>`,
+				"Body prose.", "</div>"},
+			nil,
+		},
+		{
+			"a subtitle is a heading",
+			"\\title The Title\n\\subtitle The Subtitle\n",
+			[]string{"<h1>The Title</h1>", `<h2 class="subtitle">The Subtitle</h2>`},
+			nil,
+		},
+		{
+			"a deprecation's version is markup, its advice prose",
+			"\\deprecated [6.5] Use the replacement instead.\n",
+			[]string{"Use the replacement instead."},
+			[]string{"6.5"},
+		},
+		{
+			"a bare deprecation says nothing",
+			"\\deprecated\n\nProse here.\n",
+			[]string{"<p>Prose here.</p>"},
+			[]string{"deprecated"},
+		},
+		{
+			"a cell span is markup, the cell's text prose",
+			"\\table\n    \\row\n        \\li {2,1} Spanned cell prose.\n\\endtable\n",
+			[]string{"<td>Spanned cell prose."},
+			[]string{"2,1"},
+		},
+		{
+			"deprecated inline aliases keep their text",
+			"See \\bold {bold words} and \\i {italic words}.\n",
+			[]string{"<strong>bold words</strong>", "<em>italic words</em>"},
+			[]string{"\\bold", "\\i"},
+		},
+		{
+			"a no-argument command keeps the words after it",
+			"Qt \\tm is a trademark, and \\br a line break.\n",
+			[]string{"is a trademark", "a line break."},
+			[]string{"\\tm", "\\br"},
+		},
+		{
+			"modifier and metadata commands are markup",
+			"\\abstract\n\\readonly\n\\required\n\\preliminary\n\\qmlabstract\n" +
+				"\\qmldefault\n\\qmlenumeratorsfrom Mode\n\\omitvalue Hidden\n" +
+				"\\modulestate {Technical Preview}\n\\notranslate\n\\compares strong\n" +
+				"\\default true\n\\inheaderfile QtCore\n\\attribution Upstream\n" +
+				"\\toc\n\\tocentry Entry\n\nProse here.\n",
+			[]string{"<p>Prose here.</p>"},
+			[]string{"Mode", "Hidden", "Technical", "strong", "true", "QtCore",
+				"Upstream", "Entry"},
 		},
 	}
 
@@ -188,6 +248,33 @@ func TestQdocHTML(t *testing.T) {
 				if strings.Contains(html, absent) {
 					t.Errorf("unwanted %q in:\n%s", absent, html)
 				}
+			}
+		})
+	}
+}
+
+// TestQdocVerbatimClose pins how a non-prose block ends. The code variants all
+// close on \endcode, and none of them may run past the comment that holds it.
+func TestQdocVerbatimClose(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"badcode closes on endcode", "\\badcode\n    int x = FIXME;\n\\endcode\n\nProse here.\n"},
+		{"oldcode runs through newcode", "\\oldcode\n    FIXME old;\n\\newcode\n    FIXME new;\n\\endcode\n\nProse here.\n"},
+		{"a symmetrical end is accepted too", "\\badcode\n    int x = FIXME;\n\\endbadcode\n\nProse here.\n"},
+		{"an unterminated block ends with the comment",
+			"/*!\n\\code\n    int x = FIXME;\n*/\n\n/*!\nProse here.\n*/\n"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			html := qdocToHTML(c.in)
+			if !strings.Contains(html, "<p>Prose here.</p>") {
+				t.Errorf("prose did not survive the block:\n%s", html)
+			}
+			if strings.Contains(html, "FIXME") {
+				t.Errorf("code leaked into prose:\n%s", html)
 			}
 		})
 	}
