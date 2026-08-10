@@ -266,6 +266,22 @@ func (l *Linter) lintHTMLTokens(f *core.File, raw []byte, offset int) error { //
 }
 
 func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
+	// A `data` element holds a document's machine-readable content -- an
+	// anchor name, a file name, an identifier -- which is in the document
+	// without being prose.
+	//
+	// Like `link` and `code`, `meta` is a sibling of `text` rather than a
+	// child of it, so an ordinary rule passes over it and only a rule that
+	// asks for `meta` does any work. That is the whole point: the name is
+	// reachable for a rule about naming, and invisible to a style about
+	// writing. It is not segmented either -- an identifier has no sentences.
+	if core.StringInSlice("data", state.tagHistory) {
+		f.Metrics["meta"]++
+
+		b := state.block(txt, withClasses("meta", state)+f.MetaScope+f.RealExt, 0)
+		return l.lintBlock(f, b, state.lines, 0, false)
+	}
+
 	for _, tag := range state.tagHistory {
 		scope, match := tagToScope[tag]
 		if (match && !core.StringInSlice(tag, inlineTags)) || heading.MatchString(tag) {

@@ -70,7 +70,6 @@ var qdocSkipLine = map[string]struct{}{
 	"inqmlmodule":         {},
 	"instantiates":        {},
 	"internal":            {},
-	"keyword":             {},
 	"macro":               {},
 	"meta":                {},
 	"module":              {},
@@ -124,7 +123,6 @@ var qdocSkipLine = map[string]struct{}{
 	"snippet":             {},
 	"startpage":           {},
 	"tableofcontents":     {},
-	"target":              {},
 	"threadsafe":          {},
 	"toc":                 {},
 	"tocentry":            {},
@@ -173,6 +171,16 @@ func qdocClass(arg string) string {
 		return ""
 	}
 	return arg
+}
+
+// meta writes one piece of the document's machine-readable content -- an
+// anchor name, an image's file name -- under the `meta` scope, where a rule
+// about naming can reach it and a style about prose cannot.
+func (c *qdocConv) meta(kind, value string) {
+	if value == "" {
+		return
+	}
+	c.html.WriteString(`<data class="` + kind + `">` + value + "</data>\n")
 }
 
 // qdocOpenDiv writes a `<div>` carrying `arg`'s class, if it names one.
@@ -531,10 +539,18 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 	case name == "caption":
 		c.flush()
 		c.html.WriteString("<figcaption>" + qdocInline(rest) + "</figcaption>\n")
+	case name == "target", name == "keyword":
+		// The anchor a link points at: a name, reachable under `meta` for a
+		// rule about naming and invisible to one about prose.
+		c.flush()
+		c.meta("anchor", qdocArg(rest))
 	case name == "image", name == "inlineimage":
 		// `\image file.png An optional caption of prose.`
 		c.flush()
 		fields := strings.Fields(rest)
+		if len(fields) > 0 {
+			c.meta("image", fields[0])
+		}
 		if len(fields) > 1 {
 			c.html.WriteString("<figcaption>" +
 				qdocInline(strings.Join(fields[1:], " ")) + "</figcaption>\n")

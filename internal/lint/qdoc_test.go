@@ -97,10 +97,18 @@ func TestQdocHTML(t *testing.T) {
 			[]string{"\\value"},
 		},
 		{
-			"an image's caption is prose, its file markup",
+			"an image's caption is prose, its file name metadata",
 			"\\image diagram.png A caption sentence.\n",
-			[]string{"<figcaption>A caption sentence.</figcaption>"},
-			[]string{"diagram.png"},
+			[]string{`<data class="image">diagram.png</data>`,
+				"<figcaption>A caption sentence.</figcaption>"},
+			nil,
+		},
+		{
+			"an anchor's name is metadata",
+			"\\target some-anchor\n\\keyword {Another Anchor}\n\nProse here.\n",
+			[]string{`<data class="anchor">some-anchor</data>`,
+				`<data class="anchor">Another Anchor</data>`, "<p>Prose here.</p>"},
+			[]string{"\\target", "\\keyword"},
 		},
 		{
 			"sa lines are markup",

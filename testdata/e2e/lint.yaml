@@ -426,6 +426,95 @@ cases:
       api.qdocinc:3:7:T.Sidebar:'ZQX' in the sidebar
       api.qdocinc:8:35:T.Header:'ZQX' in a header span
 
+  - name: html-data
+    about: "`data` holds machine-readable content in any markup format, not
+      only QDoc: an ordinary rule passes over it"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Prose = YES
+        T.Meta = YES
+      styles/T/Prose.yml: |
+        extends: existence
+        message: "'%s' as prose"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      styles/T/Meta.yml: |
+        extends: existence
+        message: "'%s' as metadata"
+        scope: meta
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      page.html: |
+        <p>A ZQX in a paragraph.</p>
+        <data value="1">ZQX-identifier</data>
+    args: page.html
+    exit: 1
+    want: |
+      page.html:1:6:T.Prose:'ZQX' as prose
+      page.html:2:17:T.Meta:'ZQX' as metadata
+
+  - name: qdoc-meta
+    about: "anchor names and image file names are a document's machine-readable
+      content: an ordinary rule passes over them, and only a rule scoped to
+      `meta` reaches one"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Prose = YES
+        T.Anchor = YES
+        T.Image = YES
+      styles/T/Prose.yml: |
+        extends: existence
+        message: "'%s' as prose"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      styles/T/Anchor.yml: |
+        extends: existence
+        message: "'%s' in an anchor"
+        scope: meta.class.anchor
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      styles/T/Image.yml: |
+        extends: existence
+        message: "'%s' in a file name"
+        scope: meta.class.image
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      anchors.qdoc: |
+        /*!
+            \target ZQX-anchor
+            \keyword {ZQX Keyword}
+
+            A ZQX in ordinary prose.
+
+            \image ZQX-diagram.png A caption with a ZQX in it.
+        */
+    args: anchors.qdoc
+    exit: 1
+    want: |
+      anchors.qdoc:2:13:T.Anchor:'ZQX' in an anchor
+      anchors.qdoc:3:15:T.Anchor:'ZQX' in an anchor
+      anchors.qdoc:5:7:T.Prose:'ZQX' as prose
+      anchors.qdoc:7:12:T.Image:'ZQX' in a file name
+      anchors.qdoc:7:45:T.Prose:'ZQX' as prose
+
   - name: qdoc-fragments
     about: doc comments in C++ sources lint as QDoc through `[formats]`, with
       alerts mapped back to the source; only `/*!` is documentation, while
