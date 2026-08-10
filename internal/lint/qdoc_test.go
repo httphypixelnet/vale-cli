@@ -111,6 +111,12 @@ func TestQdocHTML(t *testing.T) {
 			[]string{"\\target", "\\keyword"},
 		},
 		{
+			"a snippet marker is markup, and does not break its paragraph",
+			"/*!\n    Prose one.\n//! [intro]\n    Prose two.\n*/\n",
+			[]string{"Prose one.", "Prose two."},
+			[]string{"intro", "//!"},
+		},
+		{
 			"sa lines are markup",
 			"Prose here.\n\n\\sa QWidget, QObject\n",
 			[]string{"<p>Prose here.</p>"},

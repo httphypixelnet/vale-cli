@@ -107,3 +107,11 @@
 
     Use \bold {bold prose with an XXX in it} and \i {emphasis with a TODO}.
 */
+
+/*!
+//! [intro]
+    A snippet marker holds no prose, and no TODO of its own.
+//! [intro]
+
+    \image screenshot-FIXME.png A caption with an XXX in it.
+*/

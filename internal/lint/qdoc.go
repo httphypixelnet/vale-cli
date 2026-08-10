@@ -425,6 +425,13 @@ func (c *qdocConv) line(raw string) { //nolint:gocyclo // one case per command f
 		return
 	}
 
+	// A `//` line inside a comment is a snippet marker -- `//! [intro]` --
+	// or code, never prose. QDoc renders nothing for it, so it does not end
+	// the paragraph it sits in the middle of either.
+	if strings.HasPrefix(trimmed, "//") {
+		return
+	}
+
 	if trimmed == "" {
 		c.closeDiv()
 		c.flush()

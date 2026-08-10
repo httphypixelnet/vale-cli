@@ -351,7 +351,7 @@ cases:
       briefs, notes, items, cells, and captions are prose. A command may
       share the opening `/*!` line; a conditional block's prose, a
       deprecation's advice, and a summary still count; and modifiers, cell
-      spans, and version qualifiers say nothing"
+      spans, version qualifiers, and snippet markers say nothing"
     args: test.qdoc
     exit: 0
     want: |
@@ -378,6 +378,8 @@ cases:
       test.qdoc:105:53:vale.Annotations:'TODO' left in text
       test.qdoc:108:35:vale.Annotations:'XXX' left in text
       test.qdoc:108:70:vale.Annotations:'TODO' left in text
+      test.qdoc:113:45:vale.Annotations:'TODO' left in text
+      test.qdoc:116:51:vale.Annotations:'XXX' left in text
     absent:
       - FIXME
       - NOTE
