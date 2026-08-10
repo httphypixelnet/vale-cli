@@ -209,7 +209,30 @@ var qdocInlineNames = map[string]struct{}{
 // raw-text mode, so the rest of the page is swallowed looking for a close
 // that never comes. The tokenizer decodes these again, so the text a rule
 // sees, and the text located in the source, are unchanged.
-var qdocEsc = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace
+var qdocEscAll = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace
+
+// An HTML comment, which survives escaping: `vale off` and `vale on` reach
+// the walker as comments, and a QDoc file writes them the same way any other
+// markup does.
+var qdocHTMLComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+func qdocEsc(text string) string {
+	spans := qdocHTMLComment.FindAllStringIndex(text, -1)
+	if spans == nil {
+		return qdocEscAll(text)
+	}
+
+	var out strings.Builder
+	last := 0
+	for _, s := range spans {
+		out.WriteString(qdocEscAll(text[last:s[0]]))
+		out.WriteString(text[s[0]:s[1]])
+		last = s[1]
+	}
+	out.WriteString(qdocEscAll(text[last:]))
+
+	return out.String()
+}
 
 // qdocArg strips the braces from a command argument.
 func qdocArg(arg string) string {

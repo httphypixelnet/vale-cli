@@ -481,6 +481,45 @@ cases:
       markers.qdoc:6:16:T.Mark:'MARKB'
       snippet.qdoc:7:17:T.Mark:'MARKA'
 
+  - name: qdoc-toggles
+    about: "`vale off` and `vale on` work in QDoc, as an HTML comment and
+      through `CommentDelimiters`, even though the prose around them may
+      talk about markup"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.qdoc]
+        T.Tok = YES
+        CommentDelimiters = [[, ]]
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s'"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      t.qdoc: |
+        /*!
+            A ZQX before, in a <script> tag sentence.
+
+            <!-- vale off -->
+            A ZQX an HTML comment suppresses.
+            <!-- vale on -->
+
+            [[ vale off ]]
+            A ZQX custom delimiters suppress.
+            [[ vale on ]]
+
+            A ZQX after.
+        */
+    args: t.qdoc
+    exit: 1
+    want: |
+      t.qdoc:2:7:T.Tok:'ZQX'
+      t.qdoc:12:7:T.Tok:'ZQX'
+
   - name: qdoc-classes
     about: "`.qdocinc` is QDoc without configuration, and `\\div` and `\\span`
       carry their class into the scope so a rule can target the prose they

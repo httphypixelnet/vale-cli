@@ -123,6 +123,12 @@ func TestQdocHTML(t *testing.T) {
 			nil,
 		},
 		{
+			"an HTML comment survives escaping",
+			"A <!-- vale off --> toggle and a <script> tag.\n",
+			[]string{"<!-- vale off -->", "&lt;script&gt;"},
+			[]string{"&lt;!--"},
+		},
+		{
 			"sa lines are markup",
 			"Prose here.\n\n\\sa QWidget, QObject\n",
 			[]string{"<p>Prose here.</p>"},
