@@ -131,7 +131,12 @@ func rstInterpreter(exe string) string {
 
 	if !rePython.MatchString(filepath.Base(python)) {
 		return ""
-	} else if !filepath.IsAbs(python) {
+	} else if !strings.ContainsAny(python, `/\`) {
+		// A bare name -- what follows `env` -- is resolved on PATH. A shebang
+		// writes a path the POSIX way whatever the host does, so `filepath` is
+		// not the judge of whether this is one: on Windows `IsAbs` wants a
+		// volume, and read that way every `#!/usr/bin/python3` in the world is
+		// a relative path that resolves to nothing.
 		return system.Which([]string{python})
 	}
 
@@ -149,17 +154,15 @@ func rstFastPath(exe string) []string {
 }
 
 // rstProbe establishes the argv for a long-lived interpreter, or nil.
+//
+// Only the interpreter the script itself names will do. Falling back to a
+// Python on PATH sounds harmless -- the probe below still has to pass -- but
+// it is a different Docutils, and the pool it warms then converts documents
+// that a spawned rst2html would have converted differently. On Windows it
+// picked up an interpreter where the two disagree about output encoding, and
+// the same document came back as `naïve` one way and `naÃ¯ve` the other.
 func rstProbe(exe string) []string {
 	python := rstInterpreter(exe)
-	if python == "" {
-		// Either there was no shebang to read or it named something other than
-		// Python. A Python on PATH is the next guess: where the script is a
-		// wrapper, that wrapper forwards to the interpreter it would have used
-		// anyway. The probe below is what decides whether the guess can do the
-		// work, so a wrong one costs the pool, not correctness.
-		python = system.Which([]string{"python3", "python"})
-	}
-
 	if python == "" {
 		return nil
 	}

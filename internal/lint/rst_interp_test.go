@@ -108,3 +108,23 @@ func TestRSTProbeRunsNothingThroughAShell(t *testing.T) {
 		t.Error("the Docutils source was executed by a shell")
 	}
 }
+
+// When the script does not name an interpreter Vale can use, there is no pool.
+// Reaching for a Python on PATH instead looks free -- the probe still has to
+// pass -- but it is a different Docutils, and a pool warmed from it converts
+// documents that a spawned rst2html would have converted differently. Windows
+// found this the hard way: the two disagreed about output encoding, so the
+// same document came back as `naïve` from one and `naÃ¯ve` from the other.
+func TestRSTProbeDoesNotSubstituteAnotherPython(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no shebang handling on Windows")
+	} else if system.Which([]string{"python3", "python"}) == "" {
+		t.Skip("no python on PATH to substitute")
+	}
+
+	shim := write(t, t.TempDir(), "rst2html", "#!/usr/bin/env bash\nexit 0\n")
+
+	if argv := rstProbe(shim); argv != nil {
+		t.Errorf("rstProbe = %v; want nil, so the run spawns rst2html per file", argv)
+	}
+}
