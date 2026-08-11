@@ -82,12 +82,22 @@ var (
 	rstDirect []string // <python> -c <server>, or nil
 )
 
+// rePython matches the names Python is installed under -- `python`, `python3`,
+// `python3.12`, `pypy3` -- and nothing else.
+var rePython = regexp.MustCompile(`(?i)^(?:python|pypy)[0-9.]*(?:\.exe)?$`)
+
 // rstInterpreter finds the Python that can import Docutils.
 //
 // It is not necessarily the `python3` on PATH: rst2html is installed with a
 // shebang naming the interpreter of the environment Docutils was installed
 // into, and on a machine with several Pythons the one on PATH often cannot
 // import it. So the script is asked which interpreter it runs on.
+//
+// The answer is only used when it names Python. rst2html is not always the
+// script it looks like: a version manager can put a shell wrapper on PATH under
+// that name, and the wrapper's shebang names its own shell. Passing the server
+// source to a shell runs its first line, `import sys`, as a command -- which is
+// a real program on a machine with ImageMagick. See #1137.
 func rstInterpreter(exe string) string {
 	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {
@@ -111,46 +121,67 @@ func rstInterpreter(exe string) string {
 	}
 
 	// `#!/usr/bin/env python3` names the interpreter in the second field.
-	if filepath.Base(fields[0]) == "env" {
+	python := fields[0]
+	if filepath.Base(python) == "env" {
 		if len(fields) < 2 {
 			return ""
 		}
-		return system.Which([]string{fields[1]})
+		python = fields[1]
 	}
 
-	return fields[0]
+	if !rePython.MatchString(filepath.Base(python)) {
+		return ""
+	} else if !filepath.IsAbs(python) {
+		return system.Which([]string{python})
+	}
+
+	return python
 }
 
 // rstFastPath returns the argv prefix for converting through a long-lived
 // interpreter, or nil when that could not be established.
 func rstFastPath(exe string) []string {
 	rstOnce.Do(func() {
-		python := rstInterpreter(exe)
-		if python == "" {
-			return
-		}
-
-		candidate := []string{python, "-c", rstServer}
-
-		// Trust it only after a document has made the round trip. The probe
-		// carries a non-ASCII character on purpose: a mismatched default
-		// encoding is what broke the first version of the AsciiDoc pool, and
-		// an ASCII-only probe would have passed anyway.
-		probe, err := startExtProc(candidate, rstArgs)
-		if err != nil {
-			return
-		}
-		defer probe.close()
-
-		got, err := probe.convert("naïve body\n")
-		if err != nil || !strings.Contains(got, "naïve body") {
-			return
-		}
-
-		rstDirect = candidate
+		rstDirect = rstProbe(exe)
 	})
 
 	return rstDirect
+}
+
+// rstProbe establishes the argv for a long-lived interpreter, or nil.
+func rstProbe(exe string) []string {
+	python := rstInterpreter(exe)
+	if python == "" {
+		// Either there was no shebang to read or it named something other than
+		// Python. A Python on PATH is the next guess: where the script is a
+		// wrapper, that wrapper forwards to the interpreter it would have used
+		// anyway. The probe below is what decides whether the guess can do the
+		// work, so a wrong one costs the pool, not correctness.
+		python = system.Which([]string{"python3", "python"})
+	}
+
+	if python == "" {
+		return nil
+	}
+
+	candidate := []string{python, "-c", rstServer}
+
+	// Trust it only after a document has made the round trip. The probe
+	// carries a non-ASCII character on purpose: a mismatched default
+	// encoding is what broke the first version of the AsciiDoc pool, and
+	// an ASCII-only probe would have passed anyway.
+	probe, err := startExtProc(candidate, rstArgs)
+	if err != nil {
+		return nil
+	}
+	defer probe.close()
+
+	got, err := probe.convert("naïve body\n")
+	if err != nil || !strings.Contains(got, "naïve body") {
+		return nil
+	}
+
+	return candidate
 }
 
 func (l *Linter) lintRST(f *core.File) error {
