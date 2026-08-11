@@ -175,6 +175,7 @@ type CLIFlags struct {
 	Filter       string
 	Local        bool
 	NoExit       bool
+	NoColor      bool
 	Normalize    bool
 	Relative     bool
 	Remote       bool

@@ -24,7 +24,7 @@ type Line struct {
 //
 // A failing case is nearly always a line that moved by a column or a message
 // that was reworded, and neither reads as two blocks of text quoted one after
-// the other. Callers render the result: what colour a `-` is, and how far it
+// the other. Callers render the result: what color a `-` is, and how far it
 // is indented, is a question about where it is being printed.
 func Diff(want, got string) []Line {
 	w, g := split(want), split(got)

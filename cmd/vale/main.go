@@ -87,25 +87,62 @@ func main() {
 	// functions, so a defer here would silently drop the profile.
 	stopProfiling := startProfiling()
 
-	pflag.Parse()
+	if err := pflag.CommandLine.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		PrintUsage(os.Stderr)
+		stopProfiling()
+		os.Exit(2)
+	}
+	configureColor()
 
 	args := pflag.Args()
 	argc := len(args)
 
-	if Flags.Version { //nolint:gocritic
+	if Flags.Version {
 		fmt.Println("vale version " + version)
 		stopProfiling()
 		os.Exit(0)
-	} else if Flags.Help {
-		pflag.Usage()
-	} else if argc == 0 && !stat() {
+	} else if argc == 0 && !Flags.Help && !stat() {
 		PrintIntro()
 	}
 
+	// `vale help`, `vale help <command>`.
+	if argc > 0 && args[0] == "help" {
+		if argc > 1 {
+			if cmd, ok := commands[args[1]]; ok && !cmd.Hidden {
+				PrintCommandUsage(os.Stdout, args[1], cmd)
+				stopProfiling()
+				os.Exit(0)
+			}
+		}
+		PrintUsage(os.Stdout)
+		stopProfiling()
+		os.Exit(0)
+	}
+
 	if argc > 0 {
-		cmd, exists := Actions[args[0]]
+		cmd, exists := commands[args[0]]
+
+		// A bare word that is nearly a command is a typo, not a document.
+		// Linting it as one reported "0 errors ... in stdin" and exited 0,
+		// which reads as a clean run of something that never ran.
+		if !exists && argc == 1 {
+			if suggestion, ok := didYouMean(args[0]); ok {
+				reportUnknownCommand(args[0], suggestion)
+				stopProfiling()
+				os.Exit(2)
+			}
+		}
+
 		if exists {
-			err := cmd(args[1:], &Flags)
+			// `vale sync --help` is a question about sync, not about Vale.
+			if Flags.Help {
+				PrintCommandUsage(os.Stdout, args[0], cmd)
+				stopProfiling()
+				os.Exit(0)
+			}
+
+			err := cmd.Run(args[1:], &Flags)
 			stopProfiling()
 
 			// Failing test cases mean Vale worked and the configuration did
@@ -119,6 +156,13 @@ func main() {
 
 			os.Exit(0)
 		}
+	}
+
+	// Help asked for without a command is a question about Vale.
+	if Flags.Help {
+		PrintUsage(os.Stdout)
+		stopProfiling()
+		os.Exit(0)
 	}
 
 	config, err := core.ReadPipeline(&Flags, false)

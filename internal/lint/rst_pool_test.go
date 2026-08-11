@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -76,7 +75,7 @@ func TestRSTPoolDoesNotLeakProcesses(t *testing.T) {
 		t.Skip("docutils not reachable on this machine")
 	}
 
-	before := pythonProcessCount(t)
+	before := childProcessCount(t)
 
 	linter, err := initLinter()
 	if err != nil {
@@ -98,7 +97,7 @@ func TestRSTPoolDoesNotLeakProcesses(t *testing.T) {
 
 	// Give the OS a moment to reap.
 	runtime.Gosched()
-	if after := pythonProcessCount(t); after > before {
+	if after := childProcessCount(t); after > before {
 		t.Errorf("leaked processes: %d before, %d after", before, after)
 	}
 }
@@ -135,16 +134,6 @@ func TestRSTPoolSurvivesABadDocument(t *testing.T) {
 	if !strings.Contains(got, "still working") {
 		t.Errorf("unexpected output after recovery: %q", got)
 	}
-}
-
-func pythonProcessCount(t *testing.T) int {
-	t.Helper()
-
-	out, err := exec.Command("ps", "-eo", "comm").Output()
-	if err != nil {
-		t.Skip("ps unavailable")
-	}
-	return strings.Count(string(out), "python")
 }
 
 // A run that lints a string owns its helper processes the same way a run that

@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,7 +14,7 @@ func TestAdocPoolDoesNotLeakProcesses(t *testing.T) {
 		t.Skip("asciidoctor not resolvable on this machine")
 	}
 
-	before := rubyProcessCount(t)
+	before := childProcessCount(t)
 
 	linter, err := initLinter()
 	if err != nil {
@@ -37,7 +36,7 @@ func TestAdocPoolDoesNotLeakProcesses(t *testing.T) {
 
 	// Give the OS a moment to reap.
 	runtime.Gosched()
-	if after := rubyProcessCount(t); after > before {
+	if after := childProcessCount(t); after > before {
 		t.Errorf("leaked processes: %d before, %d after", before, after)
 	}
 }
@@ -68,14 +67,4 @@ func TestAdocPoolSurvivesABadDocument(t *testing.T) {
 	if !strings.Contains(got, "still working") {
 		t.Errorf("unexpected output after recovery: %q", got)
 	}
-}
-
-func rubyProcessCount(t *testing.T) int {
-	t.Helper()
-
-	out, err := exec.Command("ps", "-eo", "comm").Output()
-	if err != nil {
-		t.Skip("ps unavailable")
-	}
-	return strings.Count(string(out), "ruby")
 }

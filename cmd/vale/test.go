@@ -147,7 +147,7 @@ func reportTestsJSON(results []testsuite.Result) error {
 	return nil
 }
 
-// renderDiff colours a diff and indents it under its heading.
+// renderDiff colors a diff and indents it under its heading.
 func renderDiff(diff []testsuite.Line) string {
 	if len(diff) == 0 {
 		return indentBlock("(no alerts)")

@@ -215,7 +215,7 @@ func report(t *testing.T, s *suite, tc testCase, reason, body string) {
 // diffLines renders a line diff of want against got.
 //
 // The comparison is testsuite's, which `vale test` uses for the same job on
-// the same kind of output. Only the colouring is this suite's own.
+// the same kind of output. Only the coloring is this suite's own.
 func diffLines(want, got string) string {
 	var b strings.Builder
 

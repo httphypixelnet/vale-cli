@@ -49,10 +49,14 @@ type Meta struct {
 
 func init() {
 	pflag.BoolVar(&Flags.Remote, "mode-rev-compat", false,
-		"prioritize local Vale configurations")
-	pflag.StringVar(&Flags.Built, "built", "", "post-processed file path")
+		"Prioritize remote Vale configurations.")
+	pflag.StringVar(&Flags.Built, "built", "", "A post-processed file path.")
 
-	Actions["install"] = install
+	commands["install"] = command{
+		Run:     install,
+		Summary: "Install a package from a URL.",
+		Hidden:  true,
+	}
 }
 
 func fetch(src, dst string) error {

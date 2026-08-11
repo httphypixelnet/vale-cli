@@ -1,3 +1,7 @@
+# The binary, when built into the repo root rather than into bin/. Anchored,
+# so a future `vale/` package directory is not swept up with it.
+/vale
+
 # Folders
 docs/public*
 _obj

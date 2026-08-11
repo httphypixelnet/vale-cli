@@ -28,38 +28,89 @@ type CompiledRule struct {
 	Pattern string
 }
 
-var commandInfo = map[string]string{
-	"ls-config":      "Print the current configuration to stdout.",
-	"ls-metrics":     "Print the given file's internal metrics to stdout.",
-	"ls-dirs":        "Print the default configuration directories to stdout.",
-	"ls-vars":        "Print the supported environment variables to stdout.",
-	"sync":           "Download and install external configuration sources.",
-	"host-install":   "Install the Vale native messaging host for the given browser.",
-	"host-uninstall": "Uninstall the Vale native messaging host for the given browser.",
-	"fix":            "Attempt to automatically fix the given alert.",
-	"test":           "Run the test cases kept beside a configuration's rules.",
+// A command is a subcommand of `vale` and everything its help says.
+//
+// Summary, Usage and Detail are one table rather than three so that a command
+// cannot be listed without being documented, or documented without being
+// reachable -- which is how `fix` came to be described in the help and hidden
+// from it at the same time.
+type command struct {
+	// Run does the work.
+	Run func(args []string, flags *core.CLIFlags) error
+
+	// Summary is the single line the listing in `vale --help` shows.
+	Summary string
+
+	// Usage is the invocation, without the leading `vale`.
+	Usage string
+
+	// Detail is what `vale <name> --help` adds. Empty is fine for a command
+	// whose summary says all there is to say.
+	Detail string
+
+	// Hidden keeps a command out of the listing and out of the suggestions,
+	// without making it any less reachable for whoever knows the name.
+	Hidden bool
 }
 
-// Actions are the available CLI commands.
-var Actions = map[string]func(args []string, flags *core.CLIFlags) error{
-	"ls-config":  printConfig,
-	"ls-metrics": printMetrics,
-	"ls-dirs":    printDirs,
-	"ls-vars":    printVars,
-	"sync":       sync,
-	"test":       runTests,
+// commands are the available CLI commands.
+var commands = map[string]command{
+	"ls-config": {
+		Run:     printConfig,
+		Summary: "Print the current configuration to stdout.",
+		Usage:   "ls-config",
+		Detail: "Resolves the configuration the way a lint run would -- every\n" +
+			"source, in order -- and prints the result. This is the fastest way\n" +
+			"to see which styles and rules a directory actually has in scope.",
+	},
+	"ls-metrics": {
+		Run:     printMetrics,
+		Summary: "Print the given file's internal metrics to stdout.",
+		Usage:   "ls-metrics <file>",
+		Detail: "Reports the counts Vale computed while reading the file --\n" +
+			"words, sentences, paragraphs, and the elements of its markup.",
+	},
+	"ls-dirs": {
+		Run:     printDirs,
+		Summary: "Print the default configuration directories to stdout.",
+		Usage:   "ls-dirs",
+		Detail:  "Shows where Vale looks for a StylesPath, a `.vale.ini`, and the\nnative messaging host, and whether each one is there.",
+	},
+	"ls-vars": {
+		Run:     printVars,
+		Summary: "Print the supported environment variables to stdout.",
+		Usage:   "ls-vars",
+		Detail:  "Lists every variable Vale reads, what it does, and its current value.",
+	},
+	"sync": {
+		Run:     sync,
+		Summary: "Download and install external configuration sources.",
+		Usage:   "sync",
+		Detail: "Reads the `Packages` key of the active configuration and installs\n" +
+			"each entry into the StylesPath. Run this after adding a package,\n" +
+			"and in CI before linting.",
+	},
+	"test": {
+		Run:     runTests,
+		Summary: "Run the test cases kept beside a configuration's rules.",
+		Usage:   "test [path...]",
+		// Not announced yet: the case schema is still settling, and a format
+		// people write files against is hard to take back. See #1122.
+		Hidden: true,
+	},
 
-	// private
-	"host-install":   installNativeHost,
-	"host-uninstall": uninstallNativeHost,
-	"compile":        compileRule,
-	"run":            runRule,
-	"transform":      transform,
-	"ls-path":        pathInfo,
-	"fix":            fix,
-	"tag":            runTag,
-	"dc":             printConfig,
-	"load":           loadConfigs,
+	// Private: the API surface the editor integrations and the native host
+	// use. Reachable by name, absent from the help.
+	"host-install":   {Run: installNativeHost, Summary: "Install the native messaging host.", Hidden: true},
+	"host-uninstall": {Run: uninstallNativeHost, Summary: "Uninstall the native messaging host.", Hidden: true},
+	"compile":        {Run: compileRule, Summary: "Print a rule's compiled pattern.", Hidden: true},
+	"run":            {Run: runRule, Summary: "Run a single rule against a file.", Hidden: true},
+	"transform":      {Run: transform, Summary: "Print a file after its transform.", Hidden: true},
+	"ls-path":        {Run: pathInfo, Summary: "Print the configuration files in scope.", Hidden: true},
+	"fix":            {Run: fix, Summary: "Attempt to automatically fix the given alert.", Hidden: true},
+	"tag":            {Run: runTag, Summary: "Print a file's part-of-speech tags.", Hidden: true},
+	"dc":             {Run: printConfig, Summary: "Alias for `ls-config`.", Hidden: true},
+	"load":           {Run: loadConfigs, Summary: "Print a merged pair of configurations.", Hidden: true},
 }
 
 func fix(args []string, flags *core.CLIFlags) error {

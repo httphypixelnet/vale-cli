@@ -51,7 +51,7 @@ require (
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/jdkato/regexp2/v2 v2.5.5
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
