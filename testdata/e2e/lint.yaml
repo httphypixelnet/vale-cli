@@ -702,6 +702,90 @@ cases:
       widget.cpp:6:23:T.Tok:'ZQX' in a doc comment
       widget.cpp:8:26:T.Tok:'ZQX' in a doc comment
 
+  - name: qdocinc-include
+    about: "a `.qdocinc` is an include, not a file of comments: its markup is
+      the body of one, so nothing waits for a `/*!` that the file never
+      writes, and a `//! [name]` marker is still markup"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.qdocinc]
+        T.Tok = YES
+      styles/T/Tok.yml: |
+        extends: existence
+        message: "'%s'"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      steps.qdocinc: |
+        //! [intro]
+            \note A ZQX in an included note.
+        //! [intro]
+
+        A ZQX in an included paragraph.
+      wrapped.qdocinc: |
+        /*!
+            A ZQX in an include that writes the comment out.
+        */
+    args: .
+    exit: 1
+    want: |
+      steps.qdocinc:2:13:T.Tok:'ZQX'
+      steps.qdocinc:5:3:T.Tok:'ZQX'
+      wrapped.qdocinc:2:7:T.Tok:'ZQX'
+
+  - name: qdoc-meta-in-source
+    about: "the same comment lints the same way wherever it is written: an
+      image file name is `meta` in a C++ source as much as in a `.qdoc` file,
+      so an ordinary rule passes over it and a `meta` rule reaches it"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [formats]
+        cpp = qdoc
+
+        [*.{qdoc,cpp}]
+        T.Prose = YES
+        T.Image = YES
+      styles/T/Prose.yml: |
+        extends: existence
+        message: "'%s' as prose"
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      styles/T/Image.yml: |
+        extends: existence
+        message: "'%s' in a file name"
+        scope: meta.class.image
+        level: error
+        nonword: true
+        raw:
+          - ZQX
+      same.qdoc: |
+        /*!
+            \image ZQX-diagram.png A caption with a ZQX in it.
+        */
+      widget.cpp: |
+        #include "widget.h"
+
+        /*!
+            \image ZQX-diagram.png A caption with a ZQX in it.
+        */
+        void Widget::clicked() {}
+    args: .
+    exit: 1
+    want: |
+      same.qdoc:2:12:T.Image:'ZQX' in a file name
+      same.qdoc:2:45:T.Prose:'ZQX' as prose
+      widget.cpp:4:12:T.Image:'ZQX' in a file name
+      widget.cpp:4:45:T.Prose:'ZQX' as prose
+
   - name: qml-fragments
     about: doc comments in QML sources lint as QDoc through `[formats]`;
       the QML code itself -- objects, bindings, functions, strings, line

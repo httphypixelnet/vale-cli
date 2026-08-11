@@ -654,7 +654,16 @@ func qdocConvert(content string, inComment bool) string {
 }
 
 // lintQDoc lints a QDoc source: Qt's documentation markup.
+//
+// A `.qdocinc` is the exception. It is an include -- the body of a comment,
+// pulled into a document by `\include` -- so its markup is not wrapped in
+// `/*! ... */`, and reading it as a `.qdoc` file leaves the whole thing
+// unread while waiting for a comment to open. Starting inside one reads both
+// shapes: a `/*!` still opens a comment where the file writes one. See #784.
 func (l *Linter) lintQDoc(f *core.File) error {
+	if f.RealExt == ".qdocinc" {
+		return l.lintQDocWith(f, qdocFragmentToHTML)
+	}
 	return l.lintQDocWith(f, qdocToHTML)
 }
 

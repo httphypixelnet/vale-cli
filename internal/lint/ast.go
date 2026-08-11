@@ -278,7 +278,7 @@ func (l *Linter) lintScope(f *core.File, state *walker, txt string) error {
 	if core.StringInSlice("data", state.tagHistory) {
 		f.Metrics["meta"]++
 
-		b := state.block(txt, withClasses("meta", state)+f.MetaScope+f.RealExt, 0)
+		b := state.block(txt, withClasses("meta", state)+metaScope(f)+f.RealExt, 0)
 		return l.lintBlock(f, b, state.lines, 0, false)
 	}
 
@@ -399,6 +399,19 @@ func seek(s, text string, from int) (int, int) {
 // carrying no distinct tag can still be selected. An AsciiDoc block title is a
 // `<div class="title">`, indistinguishable from body text by tag alone, and
 // becomes `text.class.title` here. See #642.
+// metaScope is the context a fragment carries, with the `text` it opens with
+// taken off.
+//
+// MetaScope is appended to every block's scope, and a comment's is
+// `text.comment.line`. A selector matches on the set of sections a scope has,
+// so appending that to `meta` puts `text` back and an ordinary rule matches
+// the content `meta` exists to hold apart -- the same QDoc comment lints
+// differently in a `.qdoc` file, where there is no MetaScope, than in the C++
+// source it was written in. See #784.
+func metaScope(f *core.File) string {
+	return strings.TrimPrefix(f.MetaScope, ".text")
+}
+
 func withClasses(scope string, state *walker) string {
 	classes := state.classes()
 	if len(classes) == 0 {
