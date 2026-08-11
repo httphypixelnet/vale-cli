@@ -156,9 +156,15 @@ func (mgr *Manager) addStyle(path string) error {
 
 	var sources []source
 	err := system.Walk(path, func(fp string, info fs.FileInfo, err error) error {
-		if err != nil {
+		switch {
+		case err != nil:
 			return err
-		} else if info.IsDir() || !strings.HasSuffix(info.Name(), ".yml") {
+		case info.IsDir() || !strings.HasSuffix(info.Name(), ".yml"):
+			return nil
+		case core.IsTestFile(info.Name()):
+			// A rule's cases live beside it, so the style directory holds YAML
+			// that is not a rule. Loaded as one it fails on `extends`, and the
+			// whole configuration stops. See #1122.
 			return nil
 		}
 		sources = append(sources, source{name: info.Name(), path: fp})

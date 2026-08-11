@@ -6,6 +6,26 @@ import (
 	"strings"
 )
 
+// TestFileSuffixes name the YAML that holds a rule's test cases rather than a
+// rule. `.yml` is the spelling Vale uses elsewhere and the one to document;
+// `.yaml` is accepted so that a configuration written the other way still
+// works.
+//
+// A rule's cases live beside it, which puts them inside the StylesPath: the
+// loader that has to skip them and the runner that has to find them must agree
+// on which is which. See #1122.
+var TestFileSuffixes = []string{".test.yml", ".test.yaml"}
+
+// IsTestFile reports whether a file name holds test cases rather than a rule.
+func IsTestFile(name string) bool {
+	for _, suffix := range TestFileSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 // CommentsByNormedExt determines what parts of a file we should lint -- e.g.,
 // we only want to lint ; comments in a Clojure file.
 //

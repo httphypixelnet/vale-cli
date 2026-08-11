@@ -37,6 +37,7 @@ var commandInfo = map[string]string{
 	"host-install":   "Install the Vale native messaging host for the given browser.",
 	"host-uninstall": "Uninstall the Vale native messaging host for the given browser.",
 	"fix":            "Attempt to automatically fix the given alert.",
+	"test":           "Run the test cases kept beside a configuration's rules.",
 }
 
 // Actions are the available CLI commands.
@@ -46,6 +47,7 @@ var Actions = map[string]func(args []string, flags *core.CLIFlags) error{
 	"ls-dirs":    printDirs,
 	"ls-vars":    printVars,
 	"sync":       sync,
+	"test":       runTests,
 
 	// private
 	"host-install":   installNativeHost,

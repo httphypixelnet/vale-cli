@@ -1,0 +1,145 @@
+# `vale test`: the cases a configuration keeps beside its rules.
+#
+# See #1122. The command lints each case's `input` in process, so these
+# scenarios are about the contract -- discovery, assertions, exit status --
+# rather than about any one rule.
+name: test-cmd
+
+# Every case starts from the same small style, then writes the test file it
+# needs. The rule is deliberately dull: what's under test is the runner.
+files:
+  .vale.ini: |
+    StylesPath = styles
+    MinAlertLevel = suggestion
+
+    [*.md]
+    BasedOnStyles = T
+  styles/T/Weasel.yml: |
+    extends: existence
+    message: "'%s' is a weasel word!"
+    level: warning
+    ignorecase: true
+    tokens:
+      - really
+      - very
+
+cases:
+  - name: passing
+    about: "the three assertions, plus `rule:` for a case that loads nothing
+      but the rule it names"
+    files:
+      styles/T/Weasel.test.yml: |
+        - name: flags a weasel word
+          input: |
+            We really need this.
+          want: |
+            1:4:T.Weasel:'really' is a weasel word!
+
+        - name: plain prose stays silent
+          input: We need this.
+          want: ""
+
+        - name: fires, message not pinned
+          input: This is very important.
+          contains: T.Weasel
+
+        - name: never fires inside a fence
+          input: |
+            ```
+            really
+            ```
+          absent:
+            - T.Weasel
+
+        - name: the rule alone, no configuration
+          rule: Weasel.yml
+          input: We really need this.
+          want: |
+            1:4:T.Weasel:'really' is a weasel word!
+    args: test
+    exit: 0
+    contains: 5 passed, 0 failed
+
+  - name: failing
+    about: a failed case reports the diff and exits 1, which is what CI reads
+    files:
+      styles/T/Weasel.test.yml: |
+        - name: wrong column
+          input: |
+            We really need this.
+          want: |
+            1:9:T.Weasel:'really' is a weasel word!
+    args: test
+    exit: 1
+    contains: |
+      - 1:9:T.Weasel:'really' is a weasel word!
+          + 1:4:T.Weasel:'really' is a weasel word!
+
+  - name: a test file is not a rule
+    about: "`Weasel.test.yml` sits in the StylesPath, and loading it as a rule
+      failed the whole configuration on its missing `extends`"
+    files:
+      styles/T/Weasel.test.yml: |
+        - name: flags a weasel word
+          input: We really need this.
+          contains: T.Weasel
+      test.md: |
+        We really need this.
+    args: test.md
+    exit: 0
+    want: |
+      test.md:1:4:T.Weasel:'really' is a weasel word!
+
+  - name: format
+    about: "a case is linted as Markdown unless it says otherwise -- and
+      `format` is read against the project's globs, so a case in a format the
+      configuration doesn't cover sees no rules at all, exactly as a file in
+      that format would"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.{md,rst}]
+        BasedOnStyles = T
+      styles/T/Weasel.test.yml: |
+        - name: linted as reStructuredText
+          format: rst
+          input: |
+            A really important line.
+          contains: T.Weasel
+
+        - name: the same text as Markdown
+          input: |
+            A really important line.
+          contains: T.Weasel
+
+        - name: a format the configuration does not cover
+          format: txt
+          input: |
+            A really important line.
+          want: ""
+    args: test
+    requires: [rst2html]
+    exit: 0
+    contains: 3 passed, 0 failed
+
+  - name: no cases found
+    about: an empty run is a mistake worth reporting, not a pass
+    files:
+      README.md: |
+        Nothing to test here.
+    args: test
+    exit: 2
+    contains: no test files found
+
+  - name: a case has to assert something
+    about: "a case with no `want`, `contains` or `absent` reads as coverage
+      while testing nothing"
+    files:
+      styles/T/Weasel.test.yml: |
+        - name: asserts nothing
+          input: We really need this.
+    args: test
+    exit: 2
+    contains: needs one of

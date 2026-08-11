@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -104,10 +105,18 @@ func main() {
 	if argc > 0 {
 		cmd, exists := Actions[args[0]]
 		if exists {
-			if err := cmd(args[1:], &Flags); err != nil {
+			err := cmd(args[1:], &Flags)
+			stopProfiling()
+
+			// Failing test cases mean Vale worked and the configuration did
+			// not, which is the same distinction `vale file.md` draws between
+			// exiting 1 and exiting 2. The command has already reported them.
+			if errors.Is(err, errTestFailed) {
+				os.Exit(1)
+			} else if err != nil {
 				handleError(err)
 			}
-			stopProfiling()
+
 			os.Exit(0)
 		}
 	}

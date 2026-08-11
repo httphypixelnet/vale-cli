@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/errata-ai/vale/v3/internal/testsuite"
 )
 
 // Colors are used only when the output is a terminal that asked for them.
@@ -211,30 +213,20 @@ func report(t *testing.T, s *suite, tc testCase, reason, body string) {
 }
 
 // diffLines renders a line diff of want against got.
+//
+// The comparison is testsuite's, which `vale test` uses for the same job on
+// the same kind of output. Only the colouring is this suite's own.
 func diffLines(want, got string) string {
-	w, g := lines(want), lines(got)
-	common := lcs(w, g)
-
 	var b strings.Builder
-	var i, j int
 
-	for _, c := range common {
-		for i < len(w) && w[i] != c {
-			fmt.Fprintf(&b, "  %s- %s%s\n", red, w[i], reset)
-			i++
+	for _, line := range testsuite.Diff(want, got) {
+		color := dim
+		if line.Op == testsuite.Del {
+			color = red
+		} else if line.Op == testsuite.Add {
+			color = green
 		}
-		for j < len(g) && g[j] != c {
-			fmt.Fprintf(&b, "  %s+ %s%s\n", green, g[j], reset)
-			j++
-		}
-		fmt.Fprintf(&b, "  %s  %s%s\n", dim, c, reset)
-		i, j = i+1, j+1
-	}
-	for ; i < len(w); i++ {
-		fmt.Fprintf(&b, "  %s- %s%s\n", red, w[i], reset)
-	}
-	for ; j < len(g); j++ {
-		fmt.Fprintf(&b, "  %s+ %s%s\n", green, g[j], reset)
+		fmt.Fprintf(&b, "  %s%c %s%s\n", color, line.Op, line.Text, reset)
 	}
 
 	fmt.Fprintf(&b, "\n  %s%s- expected   %s+ actual%s\n", dim, red, green, reset)
@@ -261,39 +253,6 @@ func lines(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
-}
-
-// lcs returns the longest common subsequence of a and b.
-func lcs(a, b []string) []string {
-	n := make([][]int, len(a)+1)
-	for i := range n {
-		n[i] = make([]int, len(b)+1)
-	}
-
-	for i := len(a) - 1; i >= 0; i-- {
-		for j := len(b) - 1; j >= 0; j-- {
-			if a[i] == b[j] {
-				n[i][j] = n[i+1][j+1] + 1
-			} else {
-				n[i][j] = max(n[i+1][j], n[i][j+1])
-			}
-		}
-	}
-
-	var out []string
-	for i, j := 0, 0; i < len(a) && j < len(b); {
-		switch {
-		case a[i] == b[j]:
-			out = append(out, a[i])
-			i, j = i+1, j+1
-		case n[i+1][j] >= n[i][j+1]:
-			i++
-		default:
-			j++
-		}
-	}
-
-	return out
 }
 
 // rel shortens a path for display, relative to the repository root.
