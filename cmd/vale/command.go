@@ -163,19 +163,32 @@ func sync(_ []string, flags *core.CLIFlags) error {
 	}
 	stylesPath := cfg.StylesPath()
 
-	p, err := pterm.DefaultProgressbar.WithTotal(len(pkgs)).Start()
-	if err != nil {
-		return err
+	// A progress bar is for someone watching it. Redirected into a CI log it
+	// leaves a trail of redrawn frames and, at the end, no record of what was
+	// actually installed -- so where nobody is watching, each package reports
+	// itself on its own line instead. See #1138.
+	var bar *pterm.ProgressbarPrinter
+	if isTTY(os.Stdout) {
+		bar, err = pterm.DefaultProgressbar.WithTotal(len(pkgs)).Start()
+		if err != nil {
+			return err
+		}
 	}
 
 	for idx, pkg := range pkgs {
 		name := system.FileNameWithoutExt(pkg)
 
-		p.UpdateTitle("Syncing " + name)
-		p.Increment()
+		if bar != nil {
+			bar.UpdateTitle("Syncing " + name)
+			bar.Increment()
+		}
 
 		if err = readPkg(pkg, stylesPath, idx); err != nil {
 			return err
+		}
+
+		if bar == nil {
+			fmt.Printf("Synced %s\n", name)
 		}
 	}
 
