@@ -653,6 +653,57 @@ cases:
       anchors.qdoc:7:12:T.Image:'ZQX' in a file name
       anchors.qdoc:7:45:T.Prose:'ZQX' as prose
 
+  - name: qdoc-image-alt
+    about: "an image's file name is `meta` whether or not alt text follows, so a
+      rule about naming sees every image; the ones missing alt text carry a
+      second class, so a rule can ask for those alone. See #784."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.qdoc]
+        T.NoAlt = YES
+        T.Name = YES
+      styles/T/NoAlt.yml: |
+        extends: existence
+        message: "'%s' is missing alt text"
+        scope: meta.class.noalt
+        level: error
+        nonword: true
+        raw:
+          - '\S+'
+      styles/T/Name.yml: |
+        extends: existence
+        message: "'%s' is an image"
+        scope: meta.class.image
+        level: suggestion
+        nonword: true
+        raw:
+          - '\S+'
+      images.qdoc: |
+        /*!
+            \image bare.png
+
+            \inlineimage inline-bare.png
+
+            \image described.png A caption of prose.
+
+            \image marked-up.png The \e main toolbar.
+
+            Text with \inlineimage trailing.png and more of the sentence.
+        */
+    args: images.qdoc
+    exit: 1
+    want: |
+      images.qdoc:2:12:T.Name:'bare.png' is an image
+      images.qdoc:2:12:T.NoAlt:'bare.png' is missing alt text
+      images.qdoc:4:18:T.Name:'inline-bare.png' is an image
+      images.qdoc:4:18:T.NoAlt:'inline-bare.png' is missing alt text
+      images.qdoc:6:12:T.Name:'described.png' is an image
+      images.qdoc:8:12:T.Name:'marked-up.png' is an image
+      images.qdoc:10:28:T.Name:'trailing.png' is an image
+
   - name: qdoc-fragments
     about: doc comments in C++ sources lint as QDoc through `[formats]`, with
       alerts mapped back to the source; only `/*!` is documentation, while

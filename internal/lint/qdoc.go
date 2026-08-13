@@ -176,11 +176,58 @@ func qdocClass(arg string) string {
 // meta writes one piece of the document's machine-readable content -- an
 // anchor name, an image's file name -- under the `meta` scope, where a rule
 // about naming can reach it and a style about prose cannot.
-func (c *qdocConv) meta(kind, value string) {
+func (c *qdocConv) meta(kind, value string, extra ...string) {
 	if value == "" {
 		return
 	}
-	c.html.WriteString(`<data class="` + kind + `">` + qdocEsc(value) + "</data>\n")
+
+	class := kind
+	for _, e := range extra {
+		class += " " + e
+	}
+
+	c.html.WriteString(`<data class="` + class + `">` + qdocEsc(value) + "</data>\n")
+}
+
+// imageMeta writes an image's file name, marked `noalt` when nothing followed
+// it.
+//
+// The file name is published either way, so a rule about naming still sees
+// every image. Dropping the node when alt text is present -- the obvious way
+// to make "image without alt text" detectable -- would have made naming rules
+// blind to exactly the images that are documented properly. A second class
+// says the same thing without taking anything away: `meta.class.image` is
+// every image, `meta.class.noalt` is the ones missing alt text. See #784.
+func (c *qdocConv) imageMeta(fields []string) {
+	if len(fields) == 0 {
+		return
+	}
+	if len(fields) == 1 {
+		c.meta("image", fields[0], "noalt")
+		return
+	}
+	c.meta("image", fields[0])
+}
+
+// imageMetaHTML is imageMeta for the inline path, which builds a string
+// rather than writing to the document.
+//
+// Whether an inline image has alt text is a softer question than for the block
+// form: `\inlineimage foo.png` sits mid-sentence, and the words after it are
+// as likely to be the rest of the sentence as a description. Anything at all
+// following the file name counts, so the reading errs towards saying nothing.
+func imageMetaHTML(arg, rest string) string {
+	file := qdocArg(arg)
+	if file == "" {
+		return ""
+	}
+
+	class := "image"
+	if strings.TrimSpace(rest) == "" {
+		class += " noalt"
+	}
+
+	return `<data class="` + class + `">` + qdocEsc(file) + "</data>"
 }
 
 // qdocOpenDiv writes a `<div>` carrying `arg`'s class, if it names one.
@@ -304,8 +351,10 @@ func qdocInline(text string) string {
 				out.WriteString("<span>" + qdocEsc(label) + "</span>")
 			}
 		case "image", "inlineimage":
-			// The argument is a file name; a caption, if any, follows as
-			// ordinary prose.
+			// The argument is a file name, published like the block form's so
+			// that a rule about images sees inline ones too; a caption, if
+			// any, stays in `rest` and is read as ordinary prose.
+			out.WriteString(imageMetaHTML(arg, rest))
 		case "unicode":
 			// The argument is a code point, not prose.
 		default:
@@ -620,9 +669,7 @@ func (c *qdocConv) content(raw string) { //nolint:gocyclo // one case per comman
 		// `\image file.png An optional caption of prose.`
 		c.flush()
 		fields := strings.Fields(rest)
-		if len(fields) > 0 {
-			c.meta("image", fields[0])
-		}
+		c.imageMeta(fields)
 		if len(fields) > 1 {
 			c.html.WriteString("<figcaption>" +
 				qdocInline(strings.Join(fields[1:], " ")) + "</figcaption>\n")
