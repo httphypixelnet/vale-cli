@@ -165,10 +165,13 @@ func sync(_ []string, flags *core.CLIFlags) error {
 
 	// A progress bar is for someone watching it. Redirected into a CI log it
 	// leaves a trail of redrawn frames and, at the end, no record of what was
-	// actually installed -- so where nobody is watching, each package reports
-	// itself on its own line instead. See #1138.
+	// actually installed -- so `--plain-progress` swaps it for a line per
+	// package. See #1138.
+	//
+	// Asked for rather than inferred: a run that has been piped somewhere for
+	// years should keep printing what it always printed.
 	var bar *pterm.ProgressbarPrinter
-	if isTTY(os.Stdout) {
+	if !flags.PlainProgress {
 		bar, err = pterm.DefaultProgressbar.WithTotal(len(pkgs)).Start()
 		if err != nil {
 			return err

@@ -4,11 +4,11 @@ dir: fixtures/pkg
 
 cases:
   - name: plain-progress
-    about: "a progress bar redraws itself into a CI log and leaves no record of
-      what was installed; where stdout is not a terminal, each package reports
-      itself on its own line instead. See #1138."
+    about: "a progress bar redraws itself into a CI log and leaves no record
+      of what was installed; `--plain-progress` swaps it for a line per package.
+      See #1138."
     dir: style
-    args: sync
+    args: sync --plain-progress
     exit: 0
     contains: |
       Synced write-good
