@@ -100,3 +100,12 @@ cases:
     exit: 0
     want: |
       issue1001.md:5:28:demo.Ending-Preposition:Don't end a sentence with 'of.'
+
+  - name: inline-comment-spacing
+    about: "#882 -- text after a comment keeps its own leading space instead of
+      fusing with the text before it; inside a still-open inline element the
+      opening tag stays the boundary, so `sona` isn't fused into `sonata`"
+    args: issue882.md
+    exit: 1
+    want: |
+      issue882.md:4:3:Vale.Spelling:Did you really mean 'sona'?
