@@ -31,9 +31,36 @@
 
 ### Spotlights
 
-> Sponsors at $1,000 and above get a dedicated page on [vale.sh](https://vale.sh).
+<div align="center">
+<table>
+<tr>
+<td align="center" width="50%">
+  <a href="https://vale.sh/sponsors/mintlify">
+    <img src="https://github.com/mintlify.png?size=200" width="72" alt="Mintlify">
+  </a>
+  <br><br>
+  <a href="https://vale.sh/sponsors/mintlify"><b>Mintlify</b></a>
+  <br>
+  <sub>An AI-native documentation platform built for developers.</sub>
+  <br>
+  <sub>Ships Vale as a built-in CI check.</sub>
+</td>
+<td align="center" width="50%">
+  <a href="https://vale.sh/sponsors/promptless">
+    <img src="https://github.com/Promptless.png?size=200" width="72" alt="Promptless">
+  </a>
+  <br><br>
+  <a href="https://vale.sh/sponsors/promptless"><b>Promptless</b></a>
+  <br>
+  <sub>Suggests doc updates when your product changes.</sub>
+  <br>
+  <sub>Runs Vale on every doc its agents write.</sub>
+</td>
+</tr>
+</table>
+</div>
 
-- [**Mintlify**](https://vale.sh/sponsors/mintlify) &mdash; an AI-native documentation platform built for developers.
+> Sponsors at $1,000 and above get a dedicated page on [vale.sh](https://vale.sh).
 
 ### Organizations
 
