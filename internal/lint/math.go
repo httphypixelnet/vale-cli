@@ -79,7 +79,8 @@ func (mathBlockParser) Open(_ ast.Node, reader text.Reader, pc parser.Context) (
 		return nil, parser.NoChildren
 	}
 	i := pos
-	for ; i < len(line) && line[i] == '$'; i++ {
+	for i < len(line) && line[i] == '$' {
+		i++
 	}
 	if i-pos < 2 {
 		return nil, parser.NoChildren
