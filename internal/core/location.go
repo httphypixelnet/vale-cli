@@ -149,7 +149,13 @@ func insideInlineMarkup(ctx string, fs []int) bool {
 	end := fs[1] + 1
 	if start > 0 && (ctx[start] == '`' || ctx[start] == '-') {
 		return true
-	} else if end < size && (ctx[end] == '`' || ctx[end] == '-') {
+	} else if end < size && (ctx[end] == '`' || ctx[end] == '-') &&
+		!unicode.IsSpace(rune(ctx[fs[1]])) {
+		// `end` looks one past the character beside the match, catching a
+		// closing backtick separated by punctuation (`foo word.`). When the
+		// character between is whitespace, though, the backtick *opens* a code
+		// span after the match -- `word `code`` is prose sitting before code,
+		// and rejecting it hands the alert to a later occurrence (#1147).
 		return true
 	}
 

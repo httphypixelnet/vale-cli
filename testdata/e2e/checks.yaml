@@ -122,6 +122,37 @@ cases:
       test.md:1:6:Test.Word:Found 'FOOBAR'.
       test.md:7:35:Test.Word:Found 'FOOBAR'.
 
+  - name: occurrence-sentence-anchor
+    about: "#1147 -- a sentence-scoped `occurrence` alert anchors to its own
+      sentence. The flagged sentence starts with `Replace` one space before a
+      code span, and a later bullet reuses the word: treating space-then-backtick
+      as inline markup handed the alert to the bullet"
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.md]
+        BasedOnStyles = T
+      styles/T/SentenceLength.yml: |
+        extends: occurrence
+        message: "Try to keep sentences short (< 30 words)."
+        scope: sentence
+        level: warning
+        max: 30
+        token: '\b(\w+)\b'
+      test.md: |
+        > The `format` option is read automatically (the loader resolves it at startup
+        > level), so leave it as-is. Replace `<preset>` with a bare name (for example
+        > `fast`) to select that preset's defaults (colors, spacing, and margins with no
+        > other changes), or a full path (for example `./theme.json`) to load your own.
+
+        - **Replace the renderer too.** Write the output yourself in a custom format.
+    args: test.md
+    exit: 0
+    want: |
+      test.md:2:30:T.SentenceLength:Try to keep sentences short (< 30 words).
+
   - name: existence-eol-anchor
     about: "#892"
     dir: EndOfLine
