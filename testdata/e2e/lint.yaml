@@ -1011,6 +1011,71 @@ cases:
       test.qmd:14:18:T.Tok:'ZQX' found
       test.qmd:16:28:T.Tok:'ZQX' found
 
+  - name: math-closing-delimiter
+    about: "#1148 -- a closing `$$` need not be alone on its line. Each of
+      these is display math to Pandoc, so the prose after it is still prose,
+      and an unclosed block ends at a blank line instead of consuming the
+      rest of the file"
+    files:
+      .vale.ini: |
+        MinAlertLevel = suggestion
+
+        [*.md]
+        BasedOnStyles = Vale
+      single-line.md: |
+        A speling error before the math.
+
+        $$x=1$$
+
+        Another speling error after it.
+      labelled.md: |
+        A speling error before the math.
+
+        $$
+        x=1
+        $$ {#eq-foo}
+
+        Another speling error after it.
+      env.md: |
+        A speling error before the math.
+
+        $$\begin{aligned}
+        x &= 1
+        \end{aligned}$$
+
+        Another speling error after it.
+      unclosed.md: |
+        A speling error before the math.
+
+        $$
+        x=1
+
+        Another speling error after it.
+      adjacent.md: |
+        A speling error before the math.
+
+        $$
+        x = speling
+        $$
+        $$
+        y = 2
+        $$
+
+        Another speling error after it.
+    args: single-line.md labelled.md env.md unclosed.md adjacent.md
+    exit: 1
+    want: |
+      adjacent.md:1:3:Vale.Spelling:Did you really mean 'speling'?
+      adjacent.md:10:9:Vale.Spelling:Did you really mean 'speling'?
+      env.md:1:3:Vale.Spelling:Did you really mean 'speling'?
+      env.md:7:9:Vale.Spelling:Did you really mean 'speling'?
+      labelled.md:1:3:Vale.Spelling:Did you really mean 'speling'?
+      labelled.md:7:9:Vale.Spelling:Did you really mean 'speling'?
+      single-line.md:1:3:Vale.Spelling:Did you really mean 'speling'?
+      single-line.md:5:9:Vale.Spelling:Did you really mean 'speling'?
+      unclosed.md:1:3:Vale.Spelling:Did you really mean 'speling'?
+      unclosed.md:6:9:Vale.Spelling:Did you really mean 'speling'?
+
   - name: myst-mapped
     about: a Markdown file opts into MyST with `[formats] md = myst`, and a
       directive's name scopes its content as a class

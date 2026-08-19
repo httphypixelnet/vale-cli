@@ -1,39 +1,162 @@
 package lint
 
 import (
+	"bytes"
+
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
-
-	mathjax "github.com/litao91/goldmark-mathjax"
 )
 
 // mathExtension parses `$$…$$` display math and `$…$` inline math, rendering
 // them as elements vale skips -- so equations aren't spell-checked as prose
 // (#878, #839).
 //
-// The inline parser is ours rather than goldmark-mathjax's: that one takes any
-// two `$` on a line as delimiters, so `$5 and $10` reads as math and the prose
-// between them is silently dropped from linting. See mathInlineParser.
+// Both parsers are ours rather than goldmark-mathjax's: its inline parser
+// takes any two `$` on a line as delimiters, so `$5 and $10` reads as math
+// and the prose between them is silently dropped from linting; its block
+// parser closes only on a line that is nothing but `$$`, so every other
+// Pandoc closing form left the block open and consumed the rest of the file
+// (#1148). See mathInlineParser and mathBlockParser.
 type mathExtension struct{}
 
 func (mathExtension) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(parser.WithBlockParsers(
-		util.Prioritized(mathjax.NewMathJaxBlockParser(), 701),
+		util.Prioritized(mathBlockParser{}, 701),
 	))
 	m.Parser().AddOptions(parser.WithInlineParsers(
 		// '$' has no built-in owner.
 		util.Prioritized(mathInlineParser{}, 500),
 	))
-	// Priority must be lower than goldmark-mathjax's own renderers (501/502)
-	// to win, since renderers are registered in reverse-priority order with
-	// later registrations overwriting earlier ones.
 	m.Renderer().AddOptions(renderer.WithNodeRenderers(
 		util.Prioritized(mathRenderer{}, 1),
 	))
+}
+
+// kindDisplayMath identifies a `$$…$$` block.
+var kindDisplayMath = ast.NewNodeKind("ValeDisplayMath")
+
+// displayMath is a `$$…$$` block. It carries its own parsing state: goldmark
+// can open the next block on a line before closing the one that ended there,
+// so state shared through a context key -- as goldmark-mathjax's parser keeps
+// it -- is wiped by the old block's Close while the new block still needs it.
+// Back-to-back display math crashed on exactly that.
+type displayMath struct {
+	ast.BaseBlock
+
+	indent int
+	closed bool
+}
+
+func (*displayMath) Kind() ast.NodeKind { return kindDisplayMath }
+
+func (*displayMath) IsRaw() bool { return true }
+
+func (n *displayMath) Dump(source []byte, level int) {
+	ast.DumpHelper(n, source, level, nil, nil)
+}
+
+// mathBlockParser reads `$$…$$` display math as a block. A `$$` at the start
+// of a line opens it, and any line that ends with an unescaped `$$` closes it
+// -- alone on the line, ending a content line (`\end{aligned}$$`), on the
+// opening line itself (`$$x=1$$`), or trailed by a `{…}` attribute, which is
+// where Pandoc and Quarto put cross-reference labels (`$$ {#eq-foo}`).
+//
+// A blank line also closes the block: Pandoc won't carry display math across
+// one, so a `$$` that is never closed masks at most its own paragraph rather
+// than the remainder of the document (#1148).
+type mathBlockParser struct{}
+
+func (mathBlockParser) Trigger() []byte { return []byte{'$'} }
+
+func (mathBlockParser) Open(_ ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
+	line, segment := reader.PeekLine()
+	pos := pc.BlockOffset()
+	if pos < 0 || line[pos] != '$' {
+		return nil, parser.NoChildren
+	}
+	i := pos
+	for ; i < len(line) && line[i] == '$'; i++ {
+	}
+	if i-pos < 2 {
+		return nil, parser.NoChildren
+	}
+
+	node := &displayMath{indent: pos}
+
+	if end := mathCloserIndex(line[i:]); end >= 0 {
+		// The block opens and closes on this line: `$$x=1$$`.
+		node.closed = true
+		if end > 0 {
+			node.Lines().Append(text.NewSegment(segment.Start+i, segment.Start+i+end))
+		}
+	} else if !util.IsBlank(line[i:]) {
+		// Content on the opening line: `$$ x = 1`.
+		node.Lines().Append(text.NewSegment(segment.Start+i, segment.Stop))
+	}
+	return node, parser.NoChildren
+}
+
+func (mathBlockParser) Continue(node ast.Node, reader text.Reader, _ parser.Context) parser.State {
+	n, ok := node.(*displayMath)
+	if !ok || n.closed {
+		return parser.Close
+	}
+
+	line, segment := reader.PeekLine()
+	if util.IsBlank(line) {
+		return parser.Close
+	}
+
+	if end := mathCloserIndex(line); end >= 0 {
+		if !util.IsBlank(line[:end]) {
+			node.Lines().Append(text.NewSegment(segment.Start, segment.Start+end))
+		}
+		reader.Advance(segment.Stop - segment.Start - segment.Padding)
+		return parser.Close
+	}
+
+	pos, padding := util.DedentPosition(line, 0, n.indent)
+	node.Lines().Append(text.NewSegmentPadding(segment.Start+pos, segment.Stop, padding))
+	reader.AdvanceAndSetPadding(segment.Stop-segment.Start-pos-1, padding)
+	return parser.Continue | parser.NoChildren
+}
+
+func (mathBlockParser) Close(_ ast.Node, _ text.Reader, _ parser.Context) {}
+
+func (mathBlockParser) CanInterruptParagraph() bool { return true }
+
+func (mathBlockParser) CanAcceptIndentedLine() bool { return false }
+
+// mathCloserIndex returns the index of the `$$` that closes display math on
+// this line: one that ends the line, allowing trailing whitespace and at most
+// one `{…}` attribute after it. It returns -1 when the line closes nothing,
+// including when the `$$` is escaped.
+func mathCloserIndex(line []byte) int {
+	end := len(line)
+	for end > 0 && util.IsSpace(line[end-1]) {
+		end--
+	}
+	if end > 0 && line[end-1] == '}' {
+		open := bytes.LastIndexByte(line[:end-1], '{')
+		if open < 0 {
+			return -1
+		}
+		end = open
+		for end > 0 && util.IsSpace(line[end-1]) {
+			end--
+		}
+	}
+	if end < 2 || line[end-1] != '$' || line[end-2] != '$' {
+		return -1
+	}
+	if end > 2 && line[end-3] == '\\' {
+		return -1
+	}
+	return end - 2
 }
 
 // kindInlineMath identifies a `$…$` span.
@@ -127,18 +250,17 @@ func (mathInlineParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) a
 	}
 }
 
-// mathRenderer renders math nodes as `pre` and `code` rather than the
-// extension's default `<span class="math">`, so vale's walker -- which skips
-// both -- excludes them from linting.
+// mathRenderer renders math nodes as `pre` and `code`, so vale's walker --
+// which skips both -- excludes them from linting.
 type mathRenderer struct{}
 
 func (mathRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
-	reg.Register(mathjax.KindMathBlock, renderMathBlock)
+	reg.Register(kindDisplayMath, renderMathBlock)
 	reg.Register(kindInlineMath, renderInlineMath)
 }
 
 func renderMathBlock(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	n, ok := node.(*mathjax.MathBlock)
+	n, ok := node.(*displayMath)
 	if !ok {
 		return ast.WalkContinue, nil
 	}
