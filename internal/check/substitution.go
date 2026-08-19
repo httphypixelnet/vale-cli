@@ -470,6 +470,10 @@ func subMsg(s Substitution, index int, observed string) (string, error) {
 	return msgRe.Replace(observed, expected, -1, -1)
 }
 
+// reUnescapedPipe separates a suggestion's options: a `|` not preceded by a
+// backslash. An escaped `\|` is a literal pipe in the option's text.
+var reUnescapedPipe = rx.MustCompile(`(?<!\\)\|`)
+
 // getOptions returns a slice of options from a match.
 //
 // For example, given the match "a|b|c", this function will return
@@ -481,14 +485,9 @@ func subMsg(s Substitution, index int, observed string) (string, error) {
 func getOptions(match string) []string {
 	options := []string{}
 
-	// We want to ignore any escaped pipes, so make a temporary substitution:
-	//
-	// TODO: Add support for `.Split` in `regexp2`.
-	temp := strings.ReplaceAll(match, `\|`, "PIPE")
-
-	for _, option := range strings.Split(temp, "|") {
+	for _, option := range reUnescapedPipe.Split(match, -1) {
 		if option != "" {
-			options = append(options, strings.ReplaceAll(option, "PIPE", `|`))
+			options = append(options, strings.ReplaceAll(option, `\|`, `|`))
 		}
 	}
 
