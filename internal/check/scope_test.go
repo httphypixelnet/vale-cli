@@ -59,9 +59,14 @@ func TestScopeMatches(t *testing.T) {
 		{[]string{"sentence"}, "text.md", false},
 		{[]string{"sentence"}, "paragraph.text.md", false},
 
-		// Element scopes reach their element in every wrapper, and no other.
+		// Element scopes reach their element, and no other. They do not reach
+		// the element's sentence fragments: the full block carries every
+		// section a fragment does, so a rule that doesn't ask for `sentence`
+		// loses nothing -- and running it per fragment reported `a.` as a
+		// whole heading (#1150).
 		{[]string{"heading"}, "text.heading.h2.md", true},
-		{[]string{"heading"}, "sentence.text.heading.h2.md", true},
+		{[]string{"heading"}, "sentence.text.heading.h2.md", false},
+		{[]string{"text"}, "sentence.text.md", false},
 		{[]string{"heading.h2"}, "text.heading.h2.md", true},
 		{[]string{"heading.h3"}, "text.heading.h2.md", false},
 		{[]string{"heading"}, "text.md", false},

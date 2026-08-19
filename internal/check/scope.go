@@ -105,12 +105,33 @@ func (s Scope) Matches(blk nlp.Block) bool {
 	candidate := cachedSelector(blk.Scope)
 	parent := cachedSelector(blk.Parent)
 
+	// A sentence fragment's scope is its parent's plus `sentence`, so any
+	// selector it satisfies without naming `sentence` is satisfied by the
+	// parent block too -- and that is the copy such a rule must see: a
+	// `scope: heading` rule reading a heading one fragment at a time reported
+	// `a.` as a whole heading (#1150).
+	fragment := strings.HasPrefix(blk.Scope, "sentence.")
+
 	for _, sel := range s.Selectors {
+		if fragment && !asksForSentence(sel) {
+			continue
+		}
 		if s.partMatches(candidate, parent, sel) {
 			return true
 		}
 	}
 
+	return false
+}
+
+// asksForSentence reports whether any of the AND-ed parts names `sentence`
+// without negating it.
+func asksForSentence(options []Selector) bool {
+	for _, part := range options {
+		if !part.Negated && part.Has("sentence") {
+			return true
+		}
+	}
 	return false
 }
 
