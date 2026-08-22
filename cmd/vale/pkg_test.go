@@ -64,6 +64,31 @@ func TestLibrary(t *testing.T) {
 	}
 }
 
+func TestVersionedLibrary(t *testing.T) {
+	packages := []string{"Google@0.7.0", "Google@^0.7.0"}
+	for _, pkg := range packages {
+		t.Run(pkg, func(t *testing.T) {
+			path, err := mockPath()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = readPkg(pkg, path, 0)
+			if err != nil {
+				t.Fatalf("failed to read package %q: %v", pkg, err)
+			}
+
+			if !system.IsDir(filepath.Join(path, "Google")) {
+				t.Fatalf("unable to find 'Google' in StylesPath for %q", pkg)
+			}
+
+			if !system.FileExists(filepath.Join(path, "Google", "Headings.yml")) {
+				t.Fatalf("unable to find 'Headings.yml' in StylesPath for %q", pkg)
+			}
+		})
+	}
+}
+
 func TestLocalZip(t *testing.T) {
 	path, err := mockPath()
 	if err != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 )
@@ -24,7 +25,7 @@ func startProfiling() func() {
 	p := &profiler{mem: os.Getenv("VALE_MEMPROFILE")}
 
 	if path := os.Getenv("VALE_CPUPROFILE"); path != "" {
-		f, err := os.Create(path)
+		f, err := os.Create(filepath.Clean(path))
 		switch {
 		case err != nil:
 			fmt.Fprintf(os.Stderr, "vale: creating CPU profile: %v\n", err)
@@ -51,7 +52,7 @@ func (p *profiler) stop() {
 		return
 	}
 
-	f, err := os.Create(p.mem)
+	f, err := os.Create(filepath.Clean(p.mem))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "vale: creating memory profile: %v\n", err)
 		return

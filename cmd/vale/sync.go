@@ -1,10 +1,16 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	cp "github.com/otiai10/copy"
 
@@ -33,13 +39,82 @@ func initPath(cfg *core.Config) error {
 }
 
 func readPkg(pkg, path string, idx int) error {
-	if core.IsPhrase(pkg) && !system.IsDir(pkg) {
-		entry := inLibrary(pkg, path)
+	if !system.IsDir(pkg) {
+		entry := inLibrary(pkg, http.DefaultClient)
 		if entry != "" {
-			return download(pkg, entry, path, idx)
+			name, _, _ := strings.Cut(pkg, "@")
+			return download(name, entry, path, idx)
 		}
 	}
 	return loadPkg(system.FileNameWithoutExt(pkg), pkg, path, idx)
+}
+
+func isFresh(path string, ttl time.Duration) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return time.Since(info.ModTime()) < ttl, nil
+}
+
+var nextPattern = regexp.MustCompile(`(?i)<([^>]+)>;\s*rel="next"`)
+
+func paginate[T any](rawURL string, client *http.Client) ([]T, error) {
+	var result []T
+	parsedURL, err := url.Parse("https://api.github.com" + rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	q := parsedURL.Query()
+	if q.Get("per_page") == "" {
+		q.Set("per_page", "100")
+	}
+	parsedURL.RawQuery = q.Encode()
+	nextURL := parsedURL.String()
+
+	for nextURL != "" {
+		req, reqErr := http.NewRequest(http.MethodGet, nextURL, nil)
+		if reqErr != nil {
+			return result, reqErr
+		}
+		req.Header.Add("Accept", "application/vnd.github.v3+json")
+		req.Header.Add("X-GitHub-Api-Version", "2026-03-10")
+
+		res, doErr := client.Do(req)
+		if doErr != nil {
+			return result, doErr
+		}
+		readErr := func() error {
+			defer res.Body.Close()
+
+			if res.StatusCode != http.StatusOK {
+				return fmt.Errorf("unexpected status %d: %s", res.StatusCode, res.Status)
+			}
+
+			var page []T
+			if decodeErr := json.NewDecoder(res.Body).Decode(&page); decodeErr != nil {
+				return decodeErr
+			}
+
+			result = append(result, page...)
+			return nil
+		}()
+		if readErr != nil {
+			return result, readErr
+		}
+		linkHeader := res.Header.Get("Link")
+		matches := nextPattern.FindStringSubmatch(linkHeader)
+		if len(matches) > 1 {
+			nextURL = matches[1]
+		} else {
+			nextURL = ""
+		}
+	}
+	return result, nil
 }
 
 func loadPkg(name, urlOrPath, styles string, index int) error {

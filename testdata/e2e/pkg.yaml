@@ -43,3 +43,30 @@ cases:
       test.md:3:5:Vale.Spelling:Did you really mean 'Myproduct'?
       test.md:7:5:Vale.Spelling:Did you really mean 'Myproduct'?
       test.md:11:1:Vale.Spelling:Did you really mean 'peut'?
+
+  - name: versioned
+    dir: versioned
+    args: test.md
+    sync: true
+    exit: 1
+    contains: |
+      test.md:1:3:Google.Headings:'A Heading with a Period.' should use sentence-style capitalization.
+      test.md:1:25:Google.HeadingPunctuation:Don't put a period at the end of a heading.
+      test.md:3:1:Vale.Spelling:Did you really mean 'peut'?
+
+  - name: versioned-range
+    dir: versioned-range
+    args: test.md
+    sync: true
+    exit: 1
+    contains: |
+      test.md:1:3:Google.Headings:'A Heading with a Period.' should use sentence-style capitalization.
+      test.md:1:25:Google.HeadingPunctuation:Don't put a period at the end of a heading.
+      test.md:3:1:Vale.Spelling:Did you really mean 'peut'?
+
+  - name: versioned-invalid
+    dir: versioned-invalid
+    args: sync --plain-progress
+    exit: 2
+    contains: |
+      'Google@invalid' is not a valid URL or the directory doesn't exist

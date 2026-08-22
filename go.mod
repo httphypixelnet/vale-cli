@@ -3,6 +3,7 @@ module github.com/errata-ai/vale/v3
 go 1.25.7
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/adrg/strutil v0.3.1
@@ -39,7 +40,6 @@ require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/MarvinJWendt/testza v0.4.2 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/atomicgo/cursor v0.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
