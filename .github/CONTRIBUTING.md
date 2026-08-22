@@ -45,7 +45,7 @@ The end-to-end suite shells out to external converters, so these also need to be
 * [rst2html](https://docutils.sourceforge.io/docs/user/tools.html#rst2html-py), installed with [docutils](https://pypi.org/project/docutils/) or [Sphinx](https://www.sphinx-doc.org/)
 * [xsltproc](http://xmlsoft.org/xslt/xsltproc.html)
 * [dita](https://www.dita-ot.org/download) (v3.6+)
-* [mdx2vast](https://www.npmjs.com/package/mdx2vast) (`npm install -g mdx2vast`)
+* [typst2vast](https://github.com/jdkato/typst2vast) (`cargo install --locked typst2vast`)
 
 Then build and test:
 
@@ -139,7 +139,7 @@ The suite runs on Linux, macOS, and Windows. You don't need the whole documentat
 ....s.s..........ss....s...s.........s.....s.......s........
 
 149 cases in 17 suites — 104 passed, 45 skipped (4.7s)
-not installed: asciidoctor, dita, mdx2vast, rst2html — see .github/CONTRIBUTING.md
+not installed: asciidoctor, dita, rst2html, typst2vast — see .github/CONTRIBUTING.md
 ```
 
 CI sets `VALE_E2E_STRICT=1`, which turns those skips into failures, so a converter that didn't install can't quietly pass for coverage.
