@@ -1137,9 +1137,82 @@ cases:
     args: test.mdx
     exit: 0
     want: |
+      test.mdx:13:14:vale.Annotations:'XXX' left in text
       test.mdx:13:70:vale.Annotations:'TODO' left in text
       test.mdx:24:1:vale.Annotations:'TODO' left in text
       test.mdx:34:26:vale.Annotations:'TODO' left in text
+
+  - name: mdx/jsx-children
+    about: "#1155 -- a JSX element's children are Markdown, per MDX's own
+      grammar. They lint at their source positions, scoped by the element's
+      name as a class; attributes and expressions stay code."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.mdx]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.mdx: |
+        import { Steps } from "@astrojs/starlight/components";
+
+        <Aside type="info" label="XXX attributes stay code">
+          A colored box holding an XXX marker.
+        </Aside>
+
+        <Steps>
+
+        1. First point here.
+
+        2. Second point, with an XXX marker.
+
+        </Steps>
+
+        An <External>inline XXX marker</External> in a sentence.
+    args: test.mdx
+    exit: 1
+    want: |
+      test.mdx:4:28:T.Marker:'XXX' left in text
+      test.mdx:11:26:T.Marker:'XXX' left in text
+      test.mdx:15:21:T.Marker:'XXX' left in text
+
+  - name: mdx/jsx-children-ignored
+    about: "#1155 -- IgnoredClasses excludes one component's children, since
+      the element's name is their class."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+        IgnoredClasses = Aside
+
+        [*.mdx]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.mdx: |
+        <Aside>
+          An ignored XXX marker.
+        </Aside>
+
+        <Steps>
+
+        1. A linted XXX marker.
+
+        </Steps>
+    args: test.mdx
+    exit: 1
+    want: |
+      test.mdx:7:13:T.Marker:'XXX' left in text
 
   - name: restructuredtext
     args: test.rst

@@ -3,6 +3,7 @@ package lint
 import (
 	"bytes"
 	"regexp"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -17,14 +18,14 @@ import (
 )
 
 // MDX is CommonMark plus ESM statements, JSX elements, and JavaScript
-// expressions. None of them hold prose: each is parsed whole -- children
-// included -- and rendered as inline or fenced code, which the walker skips.
-// A `{/* ... */}` flow comment becomes an HTML comment instead, so
-// comment-based configuration keeps working.
-//
-// This replaces shelling out to mdx2vast, whose output this reproduces: an
-// MDX node became `<code class="mdxNode <type>">` -- `<pre><code>` when it
-// spanned lines -- and everything else ordinary Markdown.
+// expressions. The JavaScript -- ESM, expressions, tags and their
+// attributes, self-closing elements -- holds no prose and renders as inline
+// or fenced code, which the walker skips. A JSX element's children are
+// Markdown, though, just as MDX itself reads them: a flow element becomes a
+// div classed with the element's name, so its content is linted and a rule
+// can reach (or a user can ignore) it by class, and an inline element
+// becomes a span the same way. A `{/* ... */}` flow comment becomes an HTML
+// comment instead, so comment-based configuration keeps working.
 
 // MDX configuration: Markdown, plus the MDX constructs.
 var goldMdx = goldmark.New(
@@ -125,10 +126,8 @@ type mdxBlock struct {
 	typ      string
 	finished bool
 
-	// scan carries the node's parsing state across lines; what it holds
-	// depends on typ.
+	// scan carries the node's parsing state across lines.
 	scan mdxScan
-	jsx  mdxJsxScan
 }
 
 var kindMdxBlock = ast.NewNodeKind("MdxBlock")
@@ -410,6 +409,33 @@ func (s *mdxJsxScan) endTag() {
 	}
 }
 
+// clone copies the scan, its slices included, so a caller can probe ahead
+// without committing.
+func (s *mdxJsxScan) clone() mdxJsxScan {
+	t := *s
+	t.stack = append([]string(nil), s.stack...)
+	t.name = append([]byte(nil), s.name...)
+	return t
+}
+
+// mdxTagEnd returns the offset just past the line's first completed tag,
+// scanning from the carried state, or -1 when the tag needs more lines. On
+// success the carried state is advanced to that offset.
+//
+// The scan reads a character ahead of itself (`</`, `/*`), so each prefix is
+// probed whole from a copy rather than a character at a time.
+func mdxTagEnd(line []byte, carried *mdxJsxScan) int {
+	for i := 1; i <= len(line); i++ {
+		t := carried.clone()
+		t.scan(line[:i])
+		if t.begun && t.mode == 0 {
+			*carried = t
+			return i
+		}
+	}
+	return -1
+}
+
 // opensJsx reports whether line[pos:] begins a JSX tag: `<` followed by a
 // name, a fragment's `>`, or a closing `/`. `<!`, `<?`, and autolink-style
 // `<scheme:` starts are left to other parsers.
@@ -439,7 +465,97 @@ func opensJsx(line []byte, pos int) bool {
 	return true
 }
 
-// An mdxJsxFlowParser reads a block-level JSX element, children and all.
+// An mdxJsxContainer is a flow JSX element whose children are Markdown, per
+// MDX's own grammar: only the tags, attributes, and expressions are
+// JavaScript. It renders as a div classed with the element's name.
+//
+// An element whose open tag spans lines but that turns out to be childless
+// (a multiline `<Component ... />`) collects its source in raw and renders
+// as code, the way a single-line element does.
+type mdxJsxContainer struct {
+	ast.BaseBlock
+
+	name    string
+	jsx     mdxJsxScan   // carries open-tag state across lines
+	raw     bytes.Buffer // the source read while pending
+	pending bool         // still inside the open tag
+	rawOnly bool         // finished childless; render raw as code
+
+	// depth counts same-name elements opened on child lines, so a nested
+	// element's close tag isn't taken for this one's; fenced guards the
+	// count against JSX quoted in a code fence.
+	depth  int
+	fenced bool
+}
+
+var kindMdxJsxContainer = ast.NewNodeKind("MdxJsxContainer")
+
+func (n *mdxJsxContainer) Kind() ast.NodeKind { return kindMdxJsxContainer }
+func (n *mdxJsxContainer) IsRaw() bool        { return n.rawOnly }
+func (n *mdxJsxContainer) Dump(source []byte, level int) {
+	ast.DumpHelper(n, source, level, nil, nil)
+}
+
+// mdxIsCloseTag reports whether line is exactly a closing tag for name.
+func mdxIsCloseTag(line []byte, name string) bool {
+	if !bytes.HasPrefix(line, []byte("</")) {
+		return false
+	}
+	rest := line[2:]
+	if !bytes.HasPrefix(rest, []byte(name)) {
+		return false
+	}
+	rest = bytes.TrimLeft(rest[len(name):], " \t")
+	return len(rest) == 1 && rest[0] == '>'
+}
+
+// mdxNetOpens counts the name's tags opened minus closed on a child line, so
+// a same-name element handled by a descendant parser is not mistaken for
+// this one's close. It reads one line at a time -- a tag broken across lines
+// or a `>` quoted in an attribute can miscount -- which covers the JSX that
+// appears in documentation.
+func mdxNetOpens(line []byte, name string) int {
+	if name == "" {
+		return 0
+	}
+
+	net := 0
+	tag := []byte(name)
+
+	for i := 0; i+1 < len(line); i++ {
+		if line[i] != '<' {
+			continue
+		}
+		j := i + 1
+		closing := line[j] == '/'
+		if closing {
+			j++
+		}
+		if !bytes.HasPrefix(line[j:], tag) {
+			continue
+		}
+		k := j + len(tag)
+		if k < len(line) && mdxTagName(line[k]) {
+			continue // a longer name
+		}
+		if closing {
+			net--
+			continue
+		}
+		end := bytes.IndexByte(line[k:], '>')
+		if end < 0 {
+			net++ // the tag spans lines
+		} else if end == 0 || line[k+end-1] != '/' {
+			net++
+		}
+	}
+	return net
+}
+
+// An mdxJsxFlowParser reads a block-level JSX element. An element opened and
+// closed on one line -- self-closing or otherwise -- is a code node, and an
+// element with lines of its own is a container whose children keep parsing
+// as Markdown.
 type mdxJsxFlowParser struct{}
 
 func (*mdxJsxFlowParser) Trigger() []byte {
@@ -453,26 +569,91 @@ func (*mdxJsxFlowParser) Open(_ ast.Node, reader text.Reader, pc parser.Context)
 		return nil, parser.NoChildren
 	}
 
-	node := &mdxBlock{typ: "mdxJsxFlowElement"}
-	node.jsx.scan(line[pos:])
-	node.finished = node.jsx.done
-	mdxConsume(node, reader)
+	var s mdxJsxScan
+	end := mdxTagEnd(line[pos:], &s)
 
-	return node, parser.NoChildren
+	if end < 0 {
+		// The open tag itself spans lines.
+		node := &mdxJsxContainer{pending: true}
+		node.jsx.scan(line[pos:])
+		node.raw.Write(line[pos:])
+		mdxAdvanceLine(reader, line)
+		return node, parser.HasChildren
+	}
+
+	if s.done || mdxDoneOnLine(s, line[pos+end:]) {
+		// The whole element sits on this line: keep it as code, the shape
+		// mdx2vast gave it.
+		node := &mdxBlock{typ: "mdxJsxFlowElement", finished: true}
+		mdxConsume(node, reader)
+		return node, parser.NoChildren
+	}
+
+	node := &mdxJsxContainer{name: s.stack[len(s.stack)-1]}
+	reader.Advance(pos + end)
+	return node, parser.HasChildren
+}
+
+// mdxDoneOnLine reports whether the element completes in the rest of its
+// first line.
+func mdxDoneOnLine(s mdxJsxScan, rest []byte) bool {
+	t := s.clone()
+	t.scan(rest)
+	return t.done
+}
+
+// mdxAdvanceLine consumes the rest of the current line.
+func mdxAdvanceLine(reader text.Reader, line []byte) {
+	reader.Advance(len(line) - 1)
 }
 
 func (*mdxJsxFlowParser) Continue(node ast.Node, reader text.Reader, _ parser.Context) parser.State {
-	n := node.(*mdxBlock) //nolint:errcheck // only mdxBlock is opened
-	if n.finished {
+	n, ok := node.(*mdxJsxContainer)
+	if !ok {
+		// The single-line code form closes itself.
 		return parser.Close
 	}
 
 	line, _ := reader.PeekLine()
-	n.jsx.scan(line)
-	n.finished = n.jsx.done
-	mdxConsume(n, reader)
 
-	return parser.Continue | parser.NoChildren
+	if n.pending {
+		end := mdxTagEnd(line, &n.jsx)
+		if end < 0 {
+			n.jsx.scan(line)
+			n.raw.Write(line)
+			mdxAdvanceLine(reader, line)
+			return parser.Continue | parser.HasChildren
+		}
+		if n.jsx.done {
+			// Childless after all: a multiline self-closing element.
+			n.raw.Write(bytes.TrimRight(line, "\n"))
+			n.rawOnly = true
+			mdxAdvanceLine(reader, line)
+			return parser.Close
+		}
+		n.pending = false
+		n.name = n.jsx.stack[len(n.jsx.stack)-1]
+		reader.Advance(end)
+		return parser.Continue | parser.HasChildren
+	}
+
+	trimmed := bytes.TrimSpace(line)
+
+	if bytes.HasPrefix(trimmed, []byte("```")) || bytes.HasPrefix(trimmed, []byte("~~~")) {
+		n.fenced = !n.fenced
+	} else if !n.fenced {
+		if mdxIsCloseTag(trimmed, n.name) {
+			if n.depth == 0 {
+				mdxAdvanceLine(reader, line)
+				return parser.Close
+			}
+			n.depth--
+		} else {
+			n.depth += mdxNetOpens(line, n.name)
+		}
+	}
+
+	return parser.Continue | parser.HasChildren
 }
 
 func (*mdxJsxFlowParser) Close(ast.Node, text.Reader, parser.Context) {}
@@ -480,13 +661,18 @@ func (*mdxJsxFlowParser) Close(ast.Node, text.Reader, parser.Context) {}
 func (*mdxJsxFlowParser) CanInterruptParagraph() bool { return true }
 func (*mdxJsxFlowParser) CanAcceptIndentedLine() bool { return false }
 
-// An mdxInline is an inline MDX node: a text expression or a JSX text
-// element, rendered as a code span.
+// An mdxInline is an inline MDX node: a text expression, a self-closing JSX
+// element -- both rendered as code spans -- or one tag of a JSX element
+// whose children stay inline prose, rendered as a span so the element's
+// name reaches rules as a class.
 type mdxInline struct {
 	ast.BaseInline
 
 	typ  string
 	text []byte
+
+	form int    // 0 code, 1 an open tag, 2 a close tag
+	name string // the tag's name, for form 1
 }
 
 var kindMdxInline = ast.NewNodeKind("MdxInline")
@@ -521,9 +707,10 @@ func (*mdxInlineParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) a
 	return nil
 }
 
-// mdxParseInline consumes an expression or element that may span lines
+// mdxParseInline consumes an expression or one JSX tag that may span lines
 // within its paragraph, returning nil -- with the reader restored -- when it
-// never ends.
+// never ends. An element's children are left inline, so they keep parsing
+// as prose; only the tag itself becomes a node.
 func mdxParseInline(block text.Reader, typ string, newJsx func() *mdxJsxScan) ast.Node {
 	l, pos := block.Position()
 
@@ -538,50 +725,54 @@ func mdxParseInline(block text.Reader, typ string, newJsx func() *mdxJsxScan) as
 			return nil
 		}
 
-		var done bool
 		if jsx != nil {
-			jsx.scan(line)
-			done = jsx.done
-		} else {
-			js.scan(line)
-			done = js.depth <= 0 && !js.comment && js.quote == 0
+			end := mdxTagEnd(line, jsx)
+			if end < 0 {
+				jsx.scan(line)
+				collected = append(collected, line...)
+				block.AdvanceLine()
+				continue
+			}
+			collected = append(collected, line[:end]...)
+			block.Advance(end)
+			return mdxInlineTag(collected, jsx)
 		}
 
-		if done {
-			// Find how much of the line the construct actually used: rescan
+		js.scan(line)
+		if js.depth <= 0 && !js.comment && js.quote == 0 {
+			// Find how much of the line the expression actually used: rescan
 			// from a fresh state to the closing position.
-			used := mdxEndOn(line, jsx != nil, collected)
+			used := mdxEndOn(line, collected)
 			collected = append(collected, line[:used]...)
 			block.Advance(used)
-			break
+			return &mdxInline{typ: typ, text: bytes.TrimRight(collected, "\n")}
 		}
 
 		collected = append(collected, line...)
 		block.AdvanceLine()
 	}
-
-	return &mdxInline{typ: typ, text: bytes.TrimRight(collected, "\n")}
 }
 
-// mdxEndOn returns the offset just past the construct's closing character on
+// mdxInlineTag builds the node for one completed inline tag: an open tag is
+// a span whose children follow as prose, a close tag ends one, and a
+// self-closing element stays a code span.
+func mdxInlineTag(collected []byte, jsx *mdxJsxScan) ast.Node {
+	node := &mdxInline{typ: "mdxJsxTextElement", text: bytes.TrimRight(collected, "\n")}
+
+	switch {
+	case bytes.HasPrefix(collected, []byte("</")):
+		node.form = 2
+	case !jsx.done:
+		node.form = 1
+		node.name = jsx.stack[len(jsx.stack)-1]
+	}
+	return node
+}
+
+// mdxEndOn returns the offset just past the expression's closing brace on
 // the line that completes it, by rescanning that line with the state carried
 // in from the earlier lines.
-func mdxEndOn(line []byte, isJsx bool, carried []byte) int {
-	if isJsx {
-		s := mdxJsxScan{}
-		s.scan(carried)
-		for i := 1; i <= len(line); i++ {
-			t := s
-			t.stack = append([]string(nil), s.stack...)
-			t.name = append([]byte(nil), s.name...)
-			t.scan(line[:i])
-			if t.done {
-				return i
-			}
-		}
-		return len(line)
-	}
-
+func mdxEndOn(line []byte, carried []byte) int {
 	s := mdxScan{}
 	s.scan(carried)
 	for i := 0; i < len(line); i++ {
@@ -597,7 +788,39 @@ type mdxRenderer struct{}
 
 func (mdxRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(kindMdxBlock, renderMdxBlock)
+	reg.Register(kindMdxJsxContainer, renderMdxContainer)
 	reg.Register(kindMdxInline, renderMdxInline)
+}
+
+// mdxClassName renders an element name as a class: a member expression's
+// dots become hyphens, since a dot separates scope parts.
+func mdxClassName(name string) string {
+	return strings.ReplaceAll(name, ".", "-")
+}
+
+func renderMdxContainer(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n, ok := node.(*mdxJsxContainer)
+	if !ok {
+		return ast.WalkContinue, nil
+	}
+
+	if n.rawOnly {
+		if entering {
+			_, _ = w.WriteString(`<pre><code class="mdxNode mdxJsxFlowElement">`)
+			_, _ = w.Write(util.EscapeHTML(bytes.TrimRight(n.raw.Bytes(), "\n")))
+			_, _ = w.WriteString("</code></pre>\n")
+		}
+		return ast.WalkContinue, nil
+	}
+
+	if !entering {
+		_, _ = w.WriteString("</div>\n")
+	} else if cls := mdxClassName(n.name); cls != "" {
+		_, _ = w.WriteString(`<div class="` + cls + `">` + "\n")
+	} else {
+		_, _ = w.WriteString("<div>\n")
+	}
+	return ast.WalkContinue, nil
 }
 
 // isMdxComment reports whether source is a `{/* ... */}` comment.
@@ -637,9 +860,20 @@ func renderMdxInline(w util.BufWriter, _ []byte, node ast.Node, entering bool) (
 		return ast.WalkContinue, nil
 	}
 
-	_, _ = w.WriteString(`<code class="mdxNode ` + n.typ + `">`)
-	_, _ = w.Write(util.EscapeHTML(n.text))
-	_, _ = w.WriteString("</code>")
+	switch n.form {
+	case 1:
+		if cls := mdxClassName(n.name); cls != "" {
+			_, _ = w.WriteString(`<span class="` + cls + `">`)
+		} else {
+			_, _ = w.WriteString("<span>")
+		}
+	case 2:
+		_, _ = w.WriteString("</span>")
+	default:
+		_, _ = w.WriteString(`<code class="mdxNode ` + n.typ + `">`)
+		_, _ = w.Write(util.EscapeHTML(n.text))
+		_, _ = w.WriteString("</code>")
+	}
 	return ast.WalkContinue, nil
 }
 
