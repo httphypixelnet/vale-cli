@@ -37,13 +37,15 @@ func Elixir() *Language {
 			//
 			// The attribute name is tested through `@_attr`, a
 			// predicate-only capture, so that the prose can be captured on
-			// its own.
+			// its own. `quoted_content` is bare prose -- the capture is
+			// named `prose`, so no delimiter stripping touches it and a
+			// `## Examples` heading keeps its markers.
 			{Name: "doc", Expr: `((unary_operator
   operand: (call
     target: (identifier) @_attr
     (arguments [
-      (string (quoted_content) @comment)
-      (sigil (quoted_content) @comment)
+      (string (quoted_content) @prose)
+      (sigil (quoted_content) @prose)
     ])))
  (#match? @_attr "^(module|type|short)?doc$"))`, Type: ""},
 		},

@@ -2,6 +2,7 @@ package code
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -11,6 +12,10 @@ type QueryEngine struct {
 	tree   *sitter.Tree
 	lang   *Language
 	cutset string
+
+	// delims is the language's Delims pattern in leftmost-longest mode, so
+	// that `#=` is read as one opener rather than `#` and a stray `=`.
+	delims *regexp.Regexp
 }
 
 // defaultCutset is the indentation a comment is dedented by when its language
@@ -25,10 +30,14 @@ func NewQueryEngine(tree *sitter.Tree, lang *Language) *QueryEngine {
 		cutset = defaultCutset
 	}
 
+	delims := regexp.MustCompile(lang.Delims.String())
+	delims.Longest()
+
 	return &QueryEngine{
 		tree:   tree,
 		lang:   lang,
 		cutset: cutset,
+		delims: delims,
 	}
 }
 
@@ -50,15 +59,23 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 
 		m = qc.FilterPredicates(m, source)
 		for _, c := range m.Captures {
+			name := q.CaptureNameForId(c.Index)
+
 			// A capture named with a leading underscore exists for a
 			// predicate to test, not to be linted -- the convention
 			// tree-sitter itself uses for internal captures. Without this,
 			// the only way to test one node and extract another is to test
 			// the node you extract, which forces a query to capture more
 			// than the prose it wants.
-			if strings.HasPrefix(q.CaptureNameForId(uint32(c.Index)), "_") {
+			if strings.HasPrefix(name, "_") {
 				continue
 			}
+
+			// A capture named `prose` is bare content -- Elixir's
+			// `quoted_content`, the body of a string -- and holds no
+			// decoration at all, so nothing may be taken off it. Everything
+			// else -- `comment`, `docstring` -- carries its delimiters.
+			prose := name == "prose"
 
 			rText := c.Node.Content(source)
 			row := int(c.Node.StartPoint().Row)
@@ -79,7 +96,10 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 				rText = trimmed
 			}
 
-			cText := qe.lang.Delims.ReplaceAllString(rText, "")
+			cText := rText
+			if !prose {
+				cText = qe.stripDelims(rText)
+			}
 
 			var strip []int
 
@@ -94,7 +114,9 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 				// a Markdown list item. Blanking keeps the width, so nothing
 				// has moved yet; the dedent below takes it off and records how
 				// much.
-				cText = qe.blankPrefixes(cText)
+				if !prose {
+					cText = qe.blankPrefixes(cText)
+				}
 
 				// Dedent like Python's inspect.cleandoc: the first line sits on
 				// (or just after) the opening delimiter, so its leading
@@ -141,6 +163,35 @@ func (qe *QueryEngine) run(meta string, q *sitter.Query, source []byte) []Commen
 	}
 
 	return comments
+}
+
+// stripDelims takes a comment's delimiters off its edges: the marker or
+// opener at the very start -- repeated, so a `##` banner comes off whole --
+// and one closer against the end, trailing whitespace aside.
+//
+// Only the edges: a delimiter character inside the prose -- the `#` of a
+// Markdown heading, the `//` of a URL -- is content, and stripping it shifted
+// every alert to its right by its width. Per-line decoration inside a block
+// is blankPrefixes's job.
+func (qe *QueryEngine) stripDelims(s string) string {
+	// The opener, repeated so a doubled marker comes off whole.
+	for {
+		loc := qe.delims.FindStringIndex(s)
+		if loc == nil || loc[0] != 0 || loc[1] == 0 {
+			break
+		}
+		s = s[loc[1]:]
+	}
+
+	// The closer: one match running to the end, trailing whitespace aside.
+	body := strings.TrimRight(s, " \t\n")
+	tail := s[len(body):]
+	if locs := qe.delims.FindAllStringIndex(body, -1); len(locs) > 0 {
+		if last := locs[len(locs)-1]; last[1] == len(body) {
+			s = body[:last[0]] + tail
+		}
+	}
+	return s
 }
 
 // blankPrefixes replaces each line's comment decoration with spaces.

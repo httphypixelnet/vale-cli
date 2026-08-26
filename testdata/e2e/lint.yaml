@@ -1348,3 +1348,47 @@ cases:
       test.mdx:40:21:vale.Annotations:'FIXME' left in text
       test.mdx:44:5:vale.Annotations:'TODO' left in text
       test.mdx:46:3:vale.Annotations:'TODO' left in text
+
+  - name: comment-delimiters-in-prose
+    about: "A delimiter character inside a comment's prose -- the `//` of a
+      URL, the `#` of a Markdown heading -- is content, not decoration. Every
+      occurrence used to be stripped, shifting each alert after one left by
+      its width."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.go: |
+        package main
+
+        // See https://example.com for XXX details.
+        func main() {}
+      test.py: |
+        # Use the #id selector XXX here.
+        ## A banner comment, XXX included.
+      test.ex: |
+        defmodule M do
+          @moduledoc """
+          Does things.
+
+          ## Examples XXX
+
+              M.run()
+          """
+        end
+    args: test.go test.py test.ex
+    exit: 1
+    want: |
+      test.ex:5:15:T.Marker:'XXX' left in text
+      test.go:3:32:T.Marker:'XXX' left in text
+      test.py:1:24:T.Marker:'XXX' left in text
+      test.py:2:22:T.Marker:'XXX' left in text

@@ -21,7 +21,7 @@
         "Scope": "text.comment.line"
     },
     {
-        "Text": "Returns a person with the name given them\n\n# Arguments\n\n* `foof` - A string slice doof that holds the nme of the person\n\n# Exmples\n\n```\nYou can have rust code between fences inside the comments\nIf you pass --test to `rustdoc`, it will even test it for you!\nuse doc::Person;\nlet person = Person::new(\"name\");\n```\n",
+        "Text": "Returns a person with the name given them\n\n# Arguments\n\n* `foof` - A string slice doof that holds the nme of the person\n\n# Exmples\n\n```\n// You can have rust code between fences inside the comments\n// If you pass --test to `rustdoc`, it will even test it for you!\nuse doc::Person;\nlet person = Person::new(\"name\");\n```\n",
         "Source": "/// Returns a person with the name given them\n///\n/// # Arguments\n///\n/// * `foof` - A string slice doof that holds the nme of the person\n///\n/// # Exmples\n///\n/// ```\n/// // You can have rust code between fences inside the comments\n/// // If you pass --test to `rustdoc`, it will even test it for you!\n/// use doc::Person;\n/// let person = Person::new(\"name\");\n/// ```\n",
         "Line": 22,
         "Offset": 4,
