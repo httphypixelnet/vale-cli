@@ -45,6 +45,19 @@ var adocArgs = []string{
 	"sectnums!",
 	"-a",
 	"toc!",
+	// Caption labels are generated the same way: "Table 1." prefixes a block
+	// title with text that appears nowhere in the source, so a match against
+	// it lands on an unrelated line.
+	//
+	// See https://github.com/vale-cli/vale/issues/1152.
+	"-a",
+	"table-caption!",
+	"-a",
+	"figure-caption!",
+	"-a",
+	"example-caption!",
+	"-a",
+	"listing-caption!",
 }
 
 // The `asciidoctor` on PATH is usually a shim that boots RubyGems before it
@@ -266,6 +279,10 @@ var adocDirectAttrs = []string{
 	"attribute-missing=drop",
 	"sectnums!=",
 	"toc!=",
+	"table-caption!=",
+	"figure-caption!=",
+	"example-caption!=",
+	"listing-caption!=",
 }
 
 // directAttributes renders user attributes the way the script parses them.
