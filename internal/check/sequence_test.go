@@ -135,3 +135,126 @@ func TestSequenceParagraphScopeMatchesParagraphSentences(t *testing.T) {
 		})
 	}
 }
+
+// A token found inside its `skip` window satisfies that window alone: the
+// tokens after it still have to hold. This rule once fired on any "the ...
+// noun" tail, whether or not a past-tense verb followed.
+func TestSequenceVerifiesTokensAfterWindow(t *testing.T) {
+	rule, err := NewSequence(testConfig(), baseCheck{
+		"extends": "sequence",
+		"name":    "Test.AfterWindow",
+		"level":   "error",
+		"message": "matched",
+		"tokens": []interface{}{
+			map[string]interface{}{"pattern": "the"},
+			map[string]interface{}{"tag": "NN", "skip": 3},
+			map[string]interface{}{"tag": "VBD"},
+		},
+	}, "Test.AfterWindow")
+	if err != nil {
+		t.Fatalf("building rule: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		text string
+		want int
+	}{
+		{"verb follows the noun", "Then the big dog barked loudly today.", 1},
+		{"no verb follows", "Near the big dog yesterday morning.", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &core.File{NLP: nlp.Info{}}
+			alerts, rerr := rule.Run(nlp.NewBlock(c.text, c.text, "text"), f, testConfig())
+			if rerr != nil {
+				t.Fatalf("running rule: %v", rerr)
+			}
+			if len(alerts) != c.want {
+				t.Errorf("%q produced %d alerts, want %d", c.text, len(alerts), c.want)
+			}
+		})
+	}
+}
+
+// `min` asks for repeated occurrences, each with its own `skip` window: two
+// nouns, anywhere in the several words before a pronoun -- the ambiguous
+// "it" -- rather than just one.
+func TestSequenceMinCountsOccurrences(t *testing.T) {
+	rule, err := NewSequence(testConfig(), baseCheck{
+		"extends": "sequence",
+		"name":    "Test.Ambiguous",
+		"level":   "warning",
+		"message": "Avoid ambiguous pronouns.",
+		"tokens": []interface{}{
+			map[string]interface{}{"tag": "NN|NNP|NNPS|NNS", "skip": 4, "min": 2},
+			map[string]interface{}{"pattern": `\w+`, "tag": `PRP`},
+		},
+	}, "Test.Ambiguous")
+	if err != nil {
+		t.Fatalf("building rule: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		text string
+		want int
+	}{
+		{"two nouns before it", "The dog chased the cat until it tired.", 1},
+		{"one noun before it", "The dog barked because it hungered.", 0},
+		{"no nouns before it", "Suddenly it stopped.", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &core.File{NLP: nlp.Info{}}
+			alerts, rerr := rule.Run(nlp.NewBlock(c.text, c.text, "text"), f, testConfig())
+			if rerr != nil {
+				t.Fatalf("running rule: %v", rerr)
+			}
+			if len(alerts) != c.want {
+				t.Errorf("%q produced %d alerts, want %d", c.text, len(alerts), c.want)
+			}
+		})
+	}
+}
+
+// Without `skip`, `min` means consecutive occurrences.
+func TestSequenceMinConsecutive(t *testing.T) {
+	rule, err := NewSequence(testConfig(), baseCheck{
+		"extends": "sequence",
+		"name":    "Test.Stacked",
+		"level":   "warning",
+		"message": "Stacked modifiers.",
+		"tokens": []interface{}{
+			map[string]interface{}{"tag": "JJ", "min": 2},
+			map[string]interface{}{"pattern": `\w+`, "tag": "NN"},
+		},
+	}, "Test.Stacked")
+	if err != nil {
+		t.Fatalf("building rule: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		text string
+		want int
+	}{
+		{"two adjectives", "It was a big red dog.", 1},
+		{"one adjective", "It was a big dog.", 0},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := &core.File{NLP: nlp.Info{}}
+			alerts, rerr := rule.Run(nlp.NewBlock(c.text, c.text, "text"), f, testConfig())
+			if rerr != nil {
+				t.Fatalf("running rule: %v", rerr)
+			}
+			if len(alerts) != c.want {
+				t.Errorf("%q produced %d alerts, want %d", c.text, len(alerts), c.want)
+			}
+		})
+	}
+}
