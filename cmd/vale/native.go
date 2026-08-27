@@ -293,7 +293,7 @@ func installNativeHost(args []string, _ *core.CLIFlags) error { //nolint:funlen
 	}
 
 	p.UpdateTitle(steps[1])
-	err = fetch(hostURL, locations["appDir"])
+	err = fetch(hostURL, locations["appDir"], "")
 	if err != nil {
 		return progressError("host-install", err, p)
 	}

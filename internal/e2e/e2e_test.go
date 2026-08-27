@@ -190,6 +190,14 @@ func check(t *testing.T, s *suite, tc testCase) (edit, bool) {
 		}
 	}
 
+	for _, path := range tc.Exists {
+		checked++
+		if _, err := os.Stat(filepath.Join(s.workdir(tc), filepath.FromSlash(path))); err != nil {
+			report(t, s, tc, fmt.Sprintf("expected file %q to exist", path), err.Error())
+			fail()
+		}
+	}
+
 	checked++
 	if code != tc.Exit {
 		if !*update {
@@ -223,6 +231,7 @@ func invoke(t *testing.T, s *suite, tc testCase) (string, int) {
 	if tc.Sync {
 		sync := exec.Command(valeBin, "sync")
 		sync.Dir = dir
+		sync.Env = commandEnv(tc)
 		if out, err := sync.CombinedOutput(); err != nil {
 			t.Fatalf("vale sync: %v\n%s", err, out)
 		}
@@ -230,6 +239,7 @@ func invoke(t *testing.T, s *suite, tc testCase) (string, int) {
 
 	cmd := exec.Command(valeBin, append(append([]string{}, sharedFlags...), tc.Args...)...)
 	cmd.Dir = dir
+	cmd.Env = commandEnv(tc)
 
 	if tc.Stdin != "" {
 		f, err := os.Open(filepath.Join(dir, tc.Stdin))
@@ -248,6 +258,25 @@ func invoke(t *testing.T, s *suite, tc testCase) (string, int) {
 	}
 
 	return clean(string(out)), cmd.ProcessState.ExitCode()
+}
+
+func commandEnv(tc testCase) []string {
+	env := os.Environ()
+	for key, value := range tc.Env {
+		prefix := key + "="
+		found := false
+		for i, entry := range env {
+			if strings.HasPrefix(entry, prefix) {
+				env[i] = prefix + value
+				found = true
+				break
+			}
+		}
+		if !found {
+			env = append(env, prefix+value)
+		}
+	}
+	return env
 }
 
 // repoRoot walks up from the working directory to the module root.

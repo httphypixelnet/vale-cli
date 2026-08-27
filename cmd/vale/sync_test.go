@@ -276,6 +276,7 @@ type testItem struct {
 }
 
 func TestPaginate(t *testing.T) {
+	t.Setenv("VALE_CACHE", t.TempDir())
 	t.Run("single page without link header", func(t *testing.T) {
 		var receivedReq *http.Request
 		client := newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -289,7 +290,7 @@ func TestPaginate(t *testing.T) {
 			}, nil
 		})
 
-		items, err := paginate[testItem]("/test/items", client)
+		items, err := paginate[testItem]("/test/items", "", client)
 		if err != nil {
 			t.Fatalf("unexpected error from paginate: %v", err)
 		}
@@ -315,6 +316,58 @@ func TestPaginate(t *testing.T) {
 		}
 	})
 
+	t.Run("reuses cached page after a not modified response", func(t *testing.T) {
+		const rawURL = "/test/cached-items"
+		const etag = `"cached-items-v1"`
+		requests := 0
+		client := newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
+			requests++
+			header := make(http.Header)
+			switch requests {
+			case 1:
+				if got := req.Header.Get("If-None-Match"); got != "" {
+					t.Errorf("first request sent unexpected ETag %q", got)
+				}
+				header.Set("ETag", etag)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Body:       io.NopCloser(strings.NewReader(`[{"id": 1, "name": "Cached item"}]`)),
+					Header:     header,
+				}, nil
+			case 2:
+				if got := req.Header.Get("If-None-Match"); got != etag {
+					t.Errorf("second request If-None-Match = %q, want %q", got, etag)
+				}
+				return &http.Response{
+					StatusCode: http.StatusNotModified,
+					Status:     "304 Not Modified",
+					Body:       io.NopCloser(strings.NewReader("")),
+					Header:     header,
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected request count: %d", requests)
+			}
+		})
+
+		items, err := paginate[testItem](rawURL, "", client)
+		if err != nil {
+			t.Fatalf("initial fetch: %v", err)
+		}
+		cachedEtag := getCachedPageEtag(rawURL)
+		if cachedEtag != etag {
+			t.Fatalf("cached ETag = %q, want %q", cachedEtag, etag)
+		}
+
+		items, err = paginate[testItem](rawURL, cachedEtag, client)
+		if err != nil {
+			t.Fatalf("conditional fetch: %v", err)
+		}
+		if len(items) != 1 || items[0].Name != "Cached item" {
+			t.Fatalf("cached items = %+v, want cached response", items)
+		}
+	})
+
 	t.Run("preserves existing per_page query param", func(t *testing.T) {
 		var receivedReq *http.Request
 		client := newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
@@ -328,7 +381,7 @@ func TestPaginate(t *testing.T) {
 			}, nil
 		})
 
-		items, err := paginate[testItem]("/test/items?per_page=50", client)
+		items, err := paginate[testItem]("/test/items?per_page=50", "", client)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -368,7 +421,7 @@ func TestPaginate(t *testing.T) {
 			}, nil
 		})
 
-		items, err := paginate[testItem]("/test/items", client)
+		items, err := paginate[testItem]("/test/items", "", client)
 		if err != nil {
 			t.Fatalf("unexpected error from paginate: %v", err)
 		}
@@ -393,7 +446,7 @@ func TestPaginate(t *testing.T) {
 			}, nil
 		})
 
-		_, err := paginate[testItem]("/test/notfound", client)
+		_, err := paginate[testItem]("/test/notfound", "", client)
 		if err == nil {
 			t.Fatal("expected error on 404 response, got nil")
 		}
@@ -412,7 +465,7 @@ func TestPaginate(t *testing.T) {
 			}, nil
 		})
 
-		_, err := paginate[testItem]("/test/items", client)
+		_, err := paginate[testItem]("/test/items", "", client)
 		if err == nil {
 			t.Fatal("expected decode error on malformed json, got nil")
 		}
@@ -423,7 +476,7 @@ func TestPaginate(t *testing.T) {
 			return nil, errors.New("connection reset by peer")
 		})
 
-		_, err := paginate[testItem]("/test/items", client)
+		_, err := paginate[testItem]("/test/items", "", client)
 		if err == nil {
 			t.Fatal("expected transport error, got nil")
 		}
@@ -434,7 +487,7 @@ func TestPaginate(t *testing.T) {
 			return nil, errors.New("unexpected client call")
 		})
 
-		_, err := paginate[testItem]("://invalid-url\x7f", client)
+		_, err := paginate[testItem]("://invalid-url\x7f", "", client)
 		if err == nil {
 			t.Fatal("expected parse error on invalid url path, got nil")
 		}

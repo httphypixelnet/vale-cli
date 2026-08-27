@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,9 +42,9 @@ func initPath(cfg *core.Config) error {
 func readPkg(pkg, path string, idx int) error {
 	if !system.IsDir(pkg) {
 		entry := inLibrary(pkg, http.DefaultClient)
-		if entry != "" {
-			name, _, _ := strings.Cut(pkg, "@")
-			return download(name, entry, path, idx)
+		if entry.URL != "" {
+			var cachePath, _ = getReleaseCachePath(entry.Version, entry.Name)
+			return download(entry.Name, entry.URL, path, idx, cachePath)
 		}
 	}
 	return loadPkg(system.FileNameWithoutExt(pkg), pkg, path, idx)
@@ -63,12 +64,86 @@ func isFresh(path string, ttl time.Duration) (bool, error) {
 
 var nextPattern = regexp.MustCompile(`(?i)<([^>]+)>;\s*rel="next"`)
 
-func paginate[T any](rawURL string, client *http.Client) ([]T, error) {
+func getPageCachePath(rawURL string) (string, error) {
+	var hash = sha256.Sum256([]byte(rawURL))
+	var pageFile, err = buildCachePath(CachePage, fmt.Sprintf("%x", hash[:]), "page.json")
+	if err != nil {
+		return "", err
+	}
+	return pageFile, nil
+}
+
+func getReleaseCachePath(version, name string) (string, error) {
+	var releaseFile, err = buildCachePath(CacheRelease, fmt.Sprintf("%s@%s", name, version), "release.json")
+	if err != nil {
+		return "", err
+	}
+	return releaseFile, nil
+}
+
+type Cache int
+
+const (
+	Error Cache = iota
+	CachePage
+	CacheRelease
+)
+
+func buildCachePath(c Cache, path ...string) (string, error) {
+	var cache, err = cacheDir()
+	if err != nil {
+		return "", err
+	}
+	var p string
+	switch c {
+	case CachePage:
+		p, err = filepath.Join(append([]string{cache, "pages"}, path...)...), nil
+
+	case CacheRelease:
+		p, err = filepath.Join(append([]string{cache, "releases"}, path...)...), nil
+	default:
+		err = errors.New("invalid cache type")
+	}
+	if err != nil {
+		return "", err
+	}
+	if err = os.MkdirAll(filepath.Dir(p), os.ModePerm); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+type Page[T any] struct {
+	Items []T    `json:"items"`
+	Etag  string `json:"etag"`
+}
+
+func getPageFromCache[T any](rawURl string) (Page[T], error) {
+	var page Page[T]
+	var path, err = getPageCachePath(rawURl)
+	if err != nil {
+		return page, err
+	}
+	var pageFile = filepath.Join(path)
+	data, err := os.ReadFile(pageFile)
+	if err != nil {
+		return page, err
+	}
+	err = json.Unmarshal(data, &page)
+	if err != nil {
+		return page, err
+	}
+	return page, err
+}
+
+func paginate[T any](rawURL, etag string, client *http.Client) ([]T, error) {
 	var result []T
+	var isFirst = true
 	parsedURL, err := url.Parse("https://api.github.com" + rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
+
 	q := parsedURL.Query()
 	if q.Get("per_page") == "" {
 		q.Set("per_page", "100")
@@ -77,46 +152,88 @@ func paginate[T any](rawURL string, client *http.Client) ([]T, error) {
 	nextURL := parsedURL.String()
 
 	for nextURL != "" {
-		req, reqErr := http.NewRequest(http.MethodGet, nextURL, nil)
-		if reqErr != nil {
-			return result, reqErr
+		req, err := http.NewRequest(http.MethodGet, nextURL, nil)
+		if err != nil {
+			return result, err
 		}
-		req.Header.Add("Accept", "application/vnd.github.v3+json")
-		req.Header.Add("X-GitHub-Api-Version", "2026-03-10")
 
-		res, doErr := client.Do(req)
-		if doErr != nil {
-			return result, doErr
+		req.Header.Set("If-None-Match", etag)
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+		req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+
+		res, err := client.Do(req)
+		if err != nil {
+			return result, err
 		}
-		readErr := func() error {
-			defer res.Body.Close()
 
-			if res.StatusCode != http.StatusOK {
-				return fmt.Errorf("unexpected status %d: %s", res.StatusCode, res.Status)
+		if res.StatusCode == http.StatusNotModified {
+			page, err := getPageFromCache[T](rawURL)
+			res.Body.Close()
+
+			if err != nil {
+				return paginate[T](rawURL, "", client)
 			}
 
+			result = append(result, page.Items...)
+		} else {
+			if res.StatusCode != http.StatusOK {
+				res.Body.Close()
+				return result, fmt.Errorf(
+					"unexpected status %d: %s",
+					res.StatusCode,
+					res.Status,
+				)
+			}
+			if isFirst {
+				etag = res.Header.Get("ETag")
+				isFirst = false
+			}
 			var page []T
-			if decodeErr := json.NewDecoder(res.Body).Decode(&page); decodeErr != nil {
-				return decodeErr
+			err := json.NewDecoder(res.Body).Decode(&page)
+			res.Body.Close()
+
+			if err != nil {
+				return result, err
 			}
 
 			result = append(result, page...)
-			return nil
-		}()
-		if readErr != nil {
-			return result, readErr
 		}
-		linkHeader := res.Header.Get("Link")
-		matches := nextPattern.FindStringSubmatch(linkHeader)
+
+		matches := nextPattern.FindStringSubmatch(res.Header.Get("Link"))
 		if len(matches) > 1 {
 			nextURL = matches[1]
 		} else {
 			nextURL = ""
 		}
 	}
+	_ = cachePageResponse[T](result, rawURL, etag)
 	return result, nil
 }
+func cachePageResponse[T any](data []T, rawURL, Etag string) error {
+	path, err := getPageCachePath(rawURL)
+	if err != nil {
+		return err
+	}
+	pageFile := filepath.Join(path)
+	err = os.MkdirAll(filepath.Dir(pageFile), os.ModePerm)
+	if err != nil {
+		return err
+	}
+	p := Page[T]{
+		Items: data,
+		Etag:  Etag,
+	}
+	dataBytes, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
 
+	err = os.WriteFile(pageFile, dataBytes, 0600)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func loadPkg(name, urlOrPath, styles string, index int) error {
 	if fileInfo, err := os.Stat(urlOrPath); err == nil {
 		if fileInfo.IsDir() {
@@ -124,7 +241,7 @@ func loadPkg(name, urlOrPath, styles string, index int) error {
 		}
 		return loadLocalZipPkg(name, urlOrPath, styles, index)
 	}
-	return download(name, urlOrPath, styles, index)
+	return download(name, urlOrPath, styles, index, "")
 }
 
 func loadLocalPkg(name, pkgPath, styles string, index int) error {
@@ -144,19 +261,18 @@ func loadLocalZipPkg(name, pkgPath, styles string, index int) error {
 	return installPkg(dir, name, styles, index)
 }
 
-func download(name, url, styles string, index int) error {
+func download(name, url, styles string, index int, cacheLoc string) error {
 	dir, err := os.MkdirTemp("", name)
 	if err != nil {
 		return err
 	}
 
-	if err = fetch(url, dir); err != nil {
+	if err = fetch(url, dir, cacheLoc); err != nil {
 		if strings.Contains(err.Error(), "unsupported protocol scheme") {
 			err = fmt.Errorf("'%s' is not a valid URL or the directory doesn't exist", url)
 		}
 		return core.NewE100("download", err)
 	}
-
 	return installPkg(dir, name, styles, index)
 }
 

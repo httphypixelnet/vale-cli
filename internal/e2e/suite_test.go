@@ -66,6 +66,14 @@ type testCase struct {
 	// Sync runs `vale sync` before the case.
 	Sync bool `yaml:"sync"`
 
+	// Env adds or overrides environment variables for Vale and its optional
+	// preceding sync command.
+	Env map[string]string `yaml:"env"`
+
+	// Exists lists files that must exist in the case's working directory after
+	// Vale has run.
+	Exists []string `yaml:"exists"`
+
 	// Exit is the expected exit status.
 	Exit int `yaml:"exit"`
 

@@ -58,7 +58,7 @@ func TestReleaseUnmarshalJSON(t *testing.T) {
 			]
 		}`
 
-		var rel Release
+		var rel GitHubRelease
 		if err := json.Unmarshal([]byte(jsonData), &rel); err != nil {
 			t.Fatalf("unexpected unmarshal error: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestReleaseUnmarshalJSON(t *testing.T) {
 	})
 
 	t.Run("invalid json syntax", func(t *testing.T) {
-		var rel Release
+		var rel GitHubRelease
 		err := json.Unmarshal([]byte(`{not valid json`), &rel)
 		if err == nil {
 			t.Fatal("expected unmarshal error for malformed json, got nil")
@@ -94,7 +94,7 @@ func TestReleaseUnmarshalJSON(t *testing.T) {
 
 	t.Run("non-semver tag name ignored gracefully", func(t *testing.T) {
 		jsonData := `{"tag_name": "not-a-semver-version"}`
-		var rel Release
+		var rel GitHubRelease
 		err := json.Unmarshal([]byte(jsonData), &rel)
 		if err != nil {
 			t.Fatalf("unexpected unmarshal error: %v", err)
@@ -475,7 +475,7 @@ func TestInLibrary(t *testing.T) {
 			{"name": "Google", "url": "https://github.com/errata-ai/Google"}
 		]`)
 
-		url := inLibrary("write-good", http.DefaultClient)
+		url := inLibrary("write-good", http.DefaultClient).URL
 		if url != "https://github.com/errata-ai/write-good" {
 			t.Errorf("expected 'https://github.com/errata-ai/write-good', got %q", url)
 		}
@@ -486,8 +486,8 @@ func TestInLibrary(t *testing.T) {
 
 		client := newMockHTTPClient(func(_ *http.Request) (*http.Response, error) {
 			body := `[
-				{"url": "https://github.com/errata-ai/Google/releases/tag/v0.1.0", "id": 1, "tag_name": "v0.1.0"},
-				{"url": "https://github.com/errata-ai/Google/releases/tag/v0.2.0", "id": 2, "tag_name": "v0.2.0"}
+				{"url": "https://api.github.com/repos/errata-ai/Google/releases/1", "zipball_url": "https://api.github.com/repos/errata-ai/Google/zipball/v0.1.0", "id": 1, "tag_name": "v0.1.0"},
+				{"url": "https://api.github.com/repos/errata-ai/Google/releases/2", "zipball_url": "https://api.github.com/repos/errata-ai/Google/zipball/v0.2.0", "id": 2, "tag_name": "v0.2.0"}
 			]`
 			return &http.Response{
 				StatusCode: http.StatusOK,
@@ -497,8 +497,8 @@ func TestInLibrary(t *testing.T) {
 			}, nil
 		})
 
-		url := inLibrary("Google@^0.1.0", client)
-		expected := "https://github.com/errata-ai/Google/releases/tag/v0.1.0"
+		url := inLibrary("Google@^0.1.0", client).URL
+		expected := "https://api.github.com/repos/errata-ai/Google/zipball/v0.1.0"
 		if url != expected {
 			t.Errorf("expected %q, got %q", expected, url)
 		}
@@ -507,7 +507,7 @@ func TestInLibrary(t *testing.T) {
 	t.Run("package not in library returns empty string", func(t *testing.T) {
 		setupTestLibrary(t, defaultGoogleLib)
 
-		url := inLibrary("NonExistentPackage", http.DefaultClient)
+		url := inLibrary("NonExistentPackage", http.DefaultClient).URL
 		if url != "" {
 			t.Errorf("expected empty string for unknown package, got %q", url)
 		}
@@ -516,7 +516,7 @@ func TestInLibrary(t *testing.T) {
 	t.Run("invalid semver constraint returns empty string", func(t *testing.T) {
 		setupTestLibrary(t, defaultGoogleLib)
 
-		url := inLibrary("Google@not-a-valid-constraint", http.DefaultClient)
+		url := inLibrary("Google@not-a-valid-constraint", http.DefaultClient).URL
 		if url != "" {
 			t.Errorf("expected empty string for invalid constraint, got %q", url)
 		}
@@ -535,7 +535,7 @@ func TestInLibrary(t *testing.T) {
 			}, nil
 		})
 
-		url := inLibrary("Google@>=1.0.0", client)
+		url := inLibrary("Google@>=1.0.0", client).URL
 		if url != "" {
 			t.Errorf("expected empty string when no version matches constraint, got %q", url)
 		}
@@ -564,7 +564,7 @@ func TestInLibrary(t *testing.T) {
 			}, nil
 		})
 
-		url := inLibrary("Google@^0.1.0", client)
+		url := inLibrary("Google@^0.1.0", client).URL
 		expected := "https://example.com/Google.zip"
 		if url != expected {
 			t.Errorf("expected %q, got %q", expected, url)
@@ -593,7 +593,7 @@ func TestInLibrary(t *testing.T) {
 			}, nil
 		})
 
-		url := inLibrary("Google@^0.1.0", client)
+		url := inLibrary("Google@^0.1.0", client).URL
 		expected := "https://example.com/Google-custom.zip"
 		if url != expected {
 			t.Errorf("expected %q, got %q", expected, url)

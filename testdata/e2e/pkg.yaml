@@ -48,6 +48,10 @@ cases:
     dir: versioned
     args: test.md
     sync: true
+    env:
+      VALE_CACHE: styles/cache
+    exists:
+      - styles/cache/releases/Google@0.7.0/release.json
     exit: 1
     contains: |
       test.md:1:3:Google.Headings:'A Heading with a Period.' should use sentence-style capitalization.

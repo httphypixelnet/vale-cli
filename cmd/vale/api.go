@@ -59,13 +59,24 @@ func init() {
 	}
 }
 
-func fetch(src, dst string) error {
+func fetch(src, dst, cacheLoc string) error {
+	if (cacheLoc != "") && system.FileExists(cacheLoc) {
+		if err := system.Unarchive(cacheLoc, dst); err == nil {
+			return nil
+		}
+		if err := os.Remove(cacheLoc); err != nil {
+			return fmt.Errorf("removing invalid cache file: %w", err)
+		}
+	}
 	// Fetch the resource from the web:
 	resp, err := http.Get(src) //nolint:gosec,noctx
 
 	if err != nil {
 		return err
-	} else if resp.StatusCode != http.StatusOK {
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("could not fetch '%s' (status code '%d')", src, resp.StatusCode)
 	}
 
@@ -75,8 +86,7 @@ func fetch(src, dst string) error {
 		return err
 	}
 	defer os.Remove(tmpfile.Name()) // clean up
-
-	// Write to the  local archive:
+	defer tmpfile.Close()
 	_, err = io.Copy(tmpfile, resp.Body)
 	if err != nil {
 		return err
@@ -84,7 +94,37 @@ func fetch(src, dst string) error {
 		return err
 	}
 
-	resp.Body.Close()
+	if cacheLoc != "" {
+		cacheFile, cacheErr := os.CreateTemp(filepath.Dir(cacheLoc), ".release-*.tmp")
+		if cacheErr != nil {
+			return cacheErr
+		}
+		cacheTmp := cacheFile.Name()
+		defer os.Remove(cacheTmp)
+
+		archive, openErr := os.Open(tmpfile.Name())
+		if openErr != nil {
+			cacheFile.Close()
+			return openErr
+		}
+
+		if _, err = io.Copy(cacheFile, archive); err != nil {
+			archive.Close()
+			cacheFile.Close()
+			return err
+		}
+		if err = archive.Close(); err != nil {
+			cacheFile.Close()
+			return err
+		}
+		if err = cacheFile.Close(); err != nil {
+			return err
+		}
+		if err = os.Rename(cacheTmp, cacheLoc); err != nil {
+			return err
+		}
+	}
+
 	return system.Unarchive(tmpfile.Name(), dst)
 }
 
@@ -99,7 +139,7 @@ func install(args []string, flags *core.CLIFlags) error {
 		os.RemoveAll(style) // Remove existing version
 	}
 
-	err = fetch(args[1], cfg.StylesPath())
+	err = fetch(args[1], cfg.StylesPath(), "")
 	if err != nil {
 		return sendResponse(
 			fmt.Sprintf("Failed to install '%s'", args[1]),

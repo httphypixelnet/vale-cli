@@ -16,8 +16,9 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
-type Release struct {
+type GitHubRelease struct {
 	URL             string          `json:"url"`
+	ZipballURL      string          `json:"zipball_url"`
 	ID              int             `json:"id"`
 	TagName         *semver.Version `json:"tag_name"`
 	TargetCommitish string          `json:"target_commitish"`
@@ -44,8 +45,8 @@ type Asset struct {
 	Digest             string `json:"digest"`
 }
 
-func (r *Release) UnmarshalJSON(data []byte) error {
-	type Alias Release
+func (r *GitHubRelease) UnmarshalJSON(data []byte) error {
+	type Alias GitHubRelease
 
 	var aux struct {
 		*Alias
@@ -88,8 +89,8 @@ func getLibrary() ([]Style, error) {
 	return styles, err
 }
 
-func lookupReleases(repoInfo RepoParseResult, cache string, client *http.Client) ([]Release, error) {
-	var releases []Release
+func lookupReleases(repoInfo RepoParseResult, cache string, client *http.Client) ([]GitHubRelease, error) {
+	var releases []GitHubRelease
 	const cacheTTL = 15 * time.Minute
 	var cacheFile = filepath.Join(cache, repoInfo.owner+"."+repoInfo.repo+".json")
 	if fresh, err := isFresh(cacheFile, cacheTTL); err == nil && fresh {
@@ -100,7 +101,8 @@ func lookupReleases(repoInfo RepoParseResult, cache string, client *http.Client)
 			}
 		}
 	}
-	releases, err := paginate[Release](fmt.Sprintf("/repos/%s/%s/releases", repoInfo.owner, repoInfo.repo), client)
+	var url = fmt.Sprintf("/repos/%s/%s/releases", repoInfo.owner, repoInfo.repo)
+	releases, err := paginate[GitHubRelease](url, getCachedPageEtag(url), client)
 	if err != nil {
 		return releases, err
 	}
@@ -110,6 +112,13 @@ func lookupReleases(repoInfo RepoParseResult, cache string, client *http.Client)
 	}
 	err = os.WriteFile(cacheFile, text, 0600)
 	return releases, err
+}
+func getCachedPageEtag(URL string) string {
+	var page, err = getPageFromCache[GitHubRelease](URL)
+	if err != nil {
+		return ""
+	}
+	return page.Etag
 }
 func cacheDir() (string, error) {
 	var final string
@@ -151,7 +160,7 @@ func cacheDir() (string, error) {
 	return final, nil
 }
 
-func getMatchingRelease(repoInfo RepoParseResult, tag *semver.Constraints, client *http.Client) (*Release, error) {
+func getMatchingRelease(repoInfo RepoParseResult, tag *semver.Constraints, client *http.Client) (*GitHubRelease, error) {
 	cache, cacheErr := cacheDir()
 	if cacheErr != nil {
 		return nil, cacheErr
@@ -162,7 +171,7 @@ func getMatchingRelease(repoInfo RepoParseResult, tag *semver.Constraints, clien
 		return nil, releasesErr
 	}
 
-	var validReleases []Release
+	var validReleases []GitHubRelease
 	for _, release := range releases {
 		if release.TagName != nil && tag.Check(release.TagName) {
 			validReleases = append(validReleases, release)
@@ -194,48 +203,63 @@ func parseRepo(url string) (RepoParseResult, error) {
 	return result, nil
 }
 
-func inLibrary(pkg string, client *http.Client) string {
+type LibraryEntry struct {
+	Name    string
+	URL     string
+	Version string
+}
+
+func inLibrary(pkg string, client *http.Client) LibraryEntry {
+	libraryEntry := LibraryEntry{}
 	lookup, err := getLibrary()
 	if err != nil {
-		return ""
+		return libraryEntry
 	}
 	name, rawVersion, hasVersion := strings.Cut(pkg, "@")
 	var version *semver.Constraints
 	if hasVersion {
 		version, err = semver.NewConstraint(rawVersion)
 		if err != nil {
-			return ""
+			return libraryEntry
 		}
 	}
 
 	for _, entry := range lookup {
 		if name == entry.Name {
+			libraryEntry.Name = entry.Name
 			if version == nil {
-				return entry.URL
+				libraryEntry.URL = entry.URL
+				return libraryEntry
 			}
 			parsed, parseErr := parseRepo(entry.URL)
 			if parseErr != nil {
-				return ""
+				fmt.Printf("Unable to download package %s: Only GitHub-based packages support versioning. See https://docs.vale.sh/keys/packages#pinning-a-version for more information.", entry.Name)
+				return libraryEntry
 			}
 			release, matchErr := getMatchingRelease(parsed, version, client)
 			if matchErr != nil {
-				return ""
+				return libraryEntry
 			}
+			libraryEntry.Version = release.TagName.String()
 			for _, asset := range release.Assets {
 				if strings.EqualFold(asset.Name, name+".zip") {
-					return asset.BrowserDownloadURL
+					libraryEntry.URL = asset.BrowserDownloadURL
+					return libraryEntry
 				}
 			}
 			for _, asset := range release.Assets {
 				if strings.HasSuffix(asset.Name, ".zip") {
-					return asset.BrowserDownloadURL
+					libraryEntry.URL = asset.BrowserDownloadURL
+					return libraryEntry
 				}
 			}
 			if len(release.Assets) > 0 {
-				return release.Assets[0].BrowserDownloadURL
+				libraryEntry.URL = release.Assets[0].BrowserDownloadURL
+				return libraryEntry
 			}
-			return release.URL
+			libraryEntry.URL = release.ZipballURL
+			return libraryEntry
 		}
 	}
-	return ""
+	return libraryEntry
 }
