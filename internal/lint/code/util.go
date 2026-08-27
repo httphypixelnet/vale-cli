@@ -27,23 +27,32 @@ var cStylePrefix = regexp.MustCompile(`^([ \t]*\*)(?:[ \t]|$)`)
 func computePadding(s string, makers []string) int {
 	padding := 0
 
-	for _, m := range makers {
-		if strings.HasPrefix(s, m) {
-			l := utf8.RuneCountInString(m)
-
-			padding = l
-			for i, r := range s {
-				if i < l {
-					continue
-				}
-
-				if r == ' ' {
-					padding++
-				} else {
-					break
-				}
+	// Markers repeat -- a `##` banner, Julia's `#=` opener against a plain
+	// `#` -- so consume the longest at each step until prose begins. This has
+	// to mirror what stripDelims took off, or the alert lands short.
+	rest := s
+	for {
+		matched := ""
+		for _, m := range makers {
+			if strings.HasPrefix(rest, m) && len(m) > len(matched) {
+				matched = m
 			}
 		}
+		if matched == "" {
+			break
+		}
+		padding += utf8.RuneCountInString(matched)
+		rest = rest[len(matched):]
+	}
+
+	if padding == 0 {
+		return 0
+	}
+	for _, r := range rest {
+		if r != ' ' {
+			break
+		}
+		padding++
 	}
 
 	return padding

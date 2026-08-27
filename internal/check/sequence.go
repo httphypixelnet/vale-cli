@@ -18,6 +18,12 @@ type NLPToken struct {
 	Tag     string
 	Skip    int
 
+	// `min` (`int`): How many times the token must occur -- "at least two
+	// nouns", not just one. Each occurrence gets its own `skip` window, so
+	// `skip: 8, min: 2` reads "a noun within eight words, then another noun
+	// within eight words". The default is 1.
+	Min int
+
 	// UPOS matches a universal part-of-speech tag -- NOUN, VERB, ADJ and so
 	// on -- rather than a Penn Treebank one.
 	//
@@ -61,6 +67,12 @@ type NLPToken struct {
 	optional bool
 	start    bool
 	end      bool
+
+	// group ties the expanded copies of one occurrence together: a `skip`
+	// window's fillers and the required token they pad. When any copy
+	// matches, the walk moves past the whole group -- and no further, so the
+	// tokens after it are still verified.
+	group int
 }
 
 // Sequence looks for a user-defined sequence of tokens.
@@ -228,25 +240,39 @@ func (s Sequence) Pattern() string {
 }
 
 func makeTokens(s *Sequence, generic baseCheck) error {
+	group := 0
+
 	for _, token := range generic["tokens"].([]interface{}) {
 		tok := NLPToken{}
 		if err := mapstructure.WeakDecode(token, &tok); err != nil {
 			return err
 		}
 
-		tok.optional = true
-		for i := tok.Skip; i > 0; i-- {
-			tok.start = false
-			if i == tok.Skip {
-				tok.start = true
-			}
-			s.Tokens = append(s.Tokens, tok)
+		reps := tok.Min
+		if reps < 1 {
+			reps = 1
 		}
 
-		if tok.Pattern != "" || tok.Tag != "" || tok.UPOS != "" {
-			tok.optional = false
-			tok.end = true
-			s.Tokens = append(s.Tokens, tok)
+		for r := 0; r < reps; r++ {
+			group++
+			tok.group = group
+
+			tok.optional = true
+			tok.end = false
+			for i := tok.Skip; i > 0; i-- {
+				tok.start = false
+				if i == tok.Skip {
+					tok.start = true
+				}
+				s.Tokens = append(s.Tokens, tok)
+			}
+
+			if tok.Pattern != "" || tok.Tag != "" || tok.UPOS != "" {
+				tok.optional = false
+				tok.start = false
+				tok.end = true
+				s.Tokens = append(s.Tokens, tok)
+			}
 		}
 	}
 
@@ -319,16 +345,17 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 				//
 				// If the anchor is the first token, then there's no left-hand
 				// side to check -- hence, `idx > 0`.
-				for i := 1; idx-i >= 0; i++ {
-					if jdx-i < 0 {
+				ti, wi := idx-1, jdx-1
+				for ti >= 0 {
+					if wi < 0 {
 						return match{index: index, lo: -1, hi: -1}
 					}
-					tok := toks[idx-i]
+					tok := toks[ti]
 
-					word := words[jdx-i]
+					word := words[wi]
 					text = append([]string{word.Text}, text...)
-					lo = jdx - i
-					wordAt[idx-i] = jdx - i
+					lo = wi
+					wordAt[ti] = wi
 
 					// NOTE: We have to perform this conversion because the token slice is made
 					// with the right-hand orientation in mind. For example,
@@ -341,10 +368,20 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 					}
 
 					mat := tokensMatch(tok, word)
-					if !mat && !tok.optional {
+					switch {
+					case !mat && !tok.optional:
 						return match{index: index, lo: -1, hi: -1}
-					} else if mat && tok.optional {
-						break
+					case mat && tok.optional:
+						// The token was found inside its window: the group's
+						// spare positions are done with, but the tokens past
+						// them still have to hold.
+						for ti >= 0 && toks[ti].group == tok.group {
+							ti--
+						}
+						wi--
+					default:
+						ti--
+						wi--
 					}
 				}
 			}
@@ -353,25 +390,33 @@ func sequenceMatches(idx int, chk Sequence, target NLPToken, words []tag.Token, 
 				//
 				// If the anchor is the last token, then there's no right-hand
 				// side to check.
-				for i := 0; idx+i < sizeT; i++ {
-					if jdx+i >= sizeW {
+				ti, wi := idx, jdx
+				for ti < sizeT {
+					if wi >= sizeW {
 						return match{index: index, lo: -1, hi: -1}
 					}
-					tok := toks[idx+i]
+					tok := toks[ti]
 
-					word := words[jdx+i]
+					word := words[wi]
 					text = append(text, word.Text)
-					if lo < 0 || jdx+i < lo {
-						lo = jdx + i
+					if lo < 0 || wi < lo {
+						lo = wi
 					}
-					hi = jdx + i
-					wordAt[idx+i] = jdx + i
+					hi = wi
+					wordAt[ti] = wi
 
 					mat := tokensMatch(tok, word)
-					if !mat && !tok.optional {
+					switch {
+					case !mat && !tok.optional:
 						return match{index: index, lo: -1, hi: -1}
-					} else if mat && tok.optional {
-						break
+					case mat && tok.optional:
+						for ti < sizeT && toks[ti].group == tok.group {
+							ti++
+						}
+						wi++
+					default:
+						ti++
+						wi++
 					}
 				}
 			}

@@ -1137,9 +1137,82 @@ cases:
     args: test.mdx
     exit: 0
     want: |
+      test.mdx:13:14:vale.Annotations:'XXX' left in text
       test.mdx:13:70:vale.Annotations:'TODO' left in text
       test.mdx:24:1:vale.Annotations:'TODO' left in text
       test.mdx:34:26:vale.Annotations:'TODO' left in text
+
+  - name: mdx/jsx-children
+    about: "#1155 -- a JSX element's children are Markdown, per MDX's own
+      grammar. They lint at their source positions, scoped by the element's
+      name as a class; attributes and expressions stay code."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.mdx]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.mdx: |
+        import { Steps } from "@astrojs/starlight/components";
+
+        <Aside type="info" label="XXX attributes stay code">
+          A colored box holding an XXX marker.
+        </Aside>
+
+        <Steps>
+
+        1. First point here.
+
+        2. Second point, with an XXX marker.
+
+        </Steps>
+
+        An <External>inline XXX marker</External> in a sentence.
+    args: test.mdx
+    exit: 1
+    want: |
+      test.mdx:4:28:T.Marker:'XXX' left in text
+      test.mdx:11:26:T.Marker:'XXX' left in text
+      test.mdx:15:21:T.Marker:'XXX' left in text
+
+  - name: mdx/jsx-children-ignored
+    about: "#1155 -- IgnoredClasses excludes one component's children, since
+      the element's name is their class."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+        IgnoredClasses = Aside
+
+        [*.mdx]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.mdx: |
+        <Aside>
+          An ignored XXX marker.
+        </Aside>
+
+        <Steps>
+
+        1. A linted XXX marker.
+
+        </Steps>
+    args: test.mdx
+    exit: 1
+    want: |
+      test.mdx:7:13:T.Marker:'XXX' left in text
 
   - name: restructuredtext
     args: test.rst
@@ -1222,6 +1295,18 @@ cases:
       test.lua:9:6:vale.Annotations:'XXX' left in text
       test.lua:15:4:vale.Annotations:'TODO' left in text
 
+  - name: elixir
+    args: test.ex
+    exit: 0
+    want: |
+      test.ex:3:3:vale.Annotations:'NOTE' left in text
+      test.ex:8:3:vale.Annotations:'FIXME' left in text
+      test.ex:11:5:vale.Annotations:'NOTE' left in text
+      test.ex:12:5:vale.Annotations:'XXX' left in text
+      test.ex:14:9:vale.Annotations:'TODO' left in text
+      test.ex:21:3:vale.Annotations:'XXX' left in text
+      test.ex:27:12:vale.Annotations:'FIXME' left in text
+
   - name: haskell
     args: test.hs
     exit: 0
@@ -1263,3 +1348,47 @@ cases:
       test.mdx:40:21:vale.Annotations:'FIXME' left in text
       test.mdx:44:5:vale.Annotations:'TODO' left in text
       test.mdx:46:3:vale.Annotations:'TODO' left in text
+
+  - name: comment-delimiters-in-prose
+    about: "A delimiter character inside a comment's prose -- the `//` of a
+      URL, the `#` of a Markdown heading -- is content, not decoration. Every
+      occurrence used to be stripped, shifting each alert after one left by
+      its width."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        T.Marker = YES
+      styles/T/Marker.yml: |
+        extends: existence
+        message: "'%s' left in text"
+        level: error
+        tokens:
+          - XXX
+      test.go: |
+        package main
+
+        // See https://example.com for XXX details.
+        func main() {}
+      test.py: |
+        # Use the #id selector XXX here.
+        ## A banner comment, XXX included.
+      test.ex: |
+        defmodule M do
+          @moduledoc """
+          Does things.
+
+          ## Examples XXX
+
+              M.run()
+          """
+        end
+    args: test.go test.py test.ex
+    exit: 1
+    want: |
+      test.ex:5:15:T.Marker:'XXX' left in text
+      test.go:3:32:T.Marker:'XXX' left in text
+      test.py:1:24:T.Marker:'XXX' left in text
+      test.py:2:22:T.Marker:'XXX' left in text

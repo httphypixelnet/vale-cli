@@ -52,3 +52,59 @@ cases:
     exit: 1
     want: |
       test4.adoc:2:283:Test.Semicolons:semicolon match
+
+  - name: table-caption
+    about: "#1152 -- Asciidoctor prefixes a block title with 'Table 1.',
+      generated text that appears nowhere in the source. A match against the
+      prefix used to land on an unrelated list marker downstream; the label
+      is now disabled, and the authored title still lints in place."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*]
+        Test.Dot = YES
+        Test.Caption = YES
+      styles/Test/Dot.yml: |
+        extends: existence
+        message: "Matched period-space-capital."
+        level: warning
+        nonword: true
+        tokens:
+          - '\. [A-Z]'
+      styles/Test/Caption.yml: |
+        extends: existence
+        message: "'%s' in a caption."
+        level: warning
+        scope: table.caption
+        tokens:
+          - Valid
+      test.adoc: |
+        .Valid Items
+        [cols="1,1",options="header"]
+        |===
+        | Name | Value
+        | `item-a` | 100
+        |===
+
+        1. Perform the task.
+
+        a. Run the first command.
+        +
+        ----
+        output
+        ----
+
+        b. Start the next task.
+        +
+        ----
+        output
+        ----
+
+        c. Verify the result.
+    args: test.adoc
+    requires: asciidoctor
+    exit: 0
+    want: |
+      test.adoc:1:2:Test.Caption:'Valid' in a caption.

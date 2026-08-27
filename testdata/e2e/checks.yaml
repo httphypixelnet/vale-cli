@@ -256,6 +256,41 @@ cases:
       test.md:13:14:T.Seq:Sequence matched 'default'.
       test.md:13:22:T.Seq:Sequence matched 'database'.
 
+  - name: sequence/min
+    about: "#899 -- `min` asks for repeated occurrences of a token, each with
+      its own `skip` window: a pronoun preceded by two or more nouns, not
+      just one. A token found inside its window also no longer excuses the
+      tokens after it from matching."
+    files:
+      .vale.ini: |
+        StylesPath = styles
+        MinAlertLevel = suggestion
+
+        [*.md]
+        T.Ambiguous = YES
+      styles/T/Ambiguous.yml: |
+        extends: sequence
+        message: "Avoid ambiguous pronouns."
+        level: warning
+        ignorecase: true
+        tokens:
+          - tag: NN|NNP|NNPS|NNS
+            skip: 4
+            min: 2
+          - pattern: \w+
+            tag: PRP
+            target: true
+      test.md: |
+        The dog chased the cat until it tired.
+
+        The dog barked because it hungered.
+
+        Suddenly it stopped.
+    args: test.md
+    exit: 0
+    want: |
+      test.md:1:30:T.Ambiguous:Avoid ambiguous pronouns.
+
   - name: sequence
     dir: Sequence
     args: .
